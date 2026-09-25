@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#08090c"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.json">
+<title>A Caçada — RPG</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#08090c;color:#eee;font-family:Inter,system-ui,Arial,sans-serif}
+header{padding:18px 24px;background:#0d0f14;border-bottom:1px solid #292d37;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+.brand{font-weight:900;letter-spacing:3px}.sub{color:#9298a5;font-size:12px}
+.wrap{max-width:1200px;margin:auto;padding:20px}.screen{display:none}.screen.active{display:block}
+.hero{text-align:center;padding:60px 10px}.hero h1{font-size:clamp(40px,9vw,82px);margin:0}.hero p{color:#9ba1ad}
+.menu{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:34px}
+.btn{border:1px solid #3b404d;background:#171a22;color:#eee;border-radius:11px;padding:12px 15px;cursor:pointer}.btn:hover{border-color:#c9a227}.gold{border-color:#8d731d;background:#292313}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.card{background:#12151c;border:1px solid #2c303b;border-radius:13px;padding:16px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}.small{font-size:12px;color:#9ba1ad}
+label{display:block;color:#969ca8;font-size:12px;margin:10px 0 5px}input,select,textarea{width:100%;background:#0b0d12;color:#eee;border:1px solid #353a47;border-radius:8px;padding:10px}textarea{min-height:90px}
+.avatar{width:125px;height:125px;border-radius:13px;object-fit:cover;background:#07080a;border:1px solid #444}
+.stat{display:grid;grid-template-columns:1fr 70px;gap:7px;margin:7px 0;align-items:center}.stat input{text-align:center}
+.pill{display:inline-block;background:#292d37;border-radius:99px;padding:5px 9px;font-size:12px;margin:3px}
+.passive{border-left:3px solid #c9a227;padding:10px 12px;background:#181a21;margin:8px 0;border-radius:5px}.locked{opacity:.65;border-color:#555}
+.meter{height:14px;background:#252934;border-radius:99px;overflow:hidden;margin:7px 0}.meter>div{height:100%;background:#c9a227;width:0%;transition:.2s}
+.style{padding:12px;border:1px solid #303540;border-radius:10px;background:#151820;margin:8px 0}.style h4{margin:0 0 5px}
+.result{font-size:34px;font-weight:900;margin-top:12px}.log{max-height:260px;overflow:auto}.log div{padding:8px;border-bottom:1px solid #272b34}
+.chars{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.char{padding:12px;background:#171a22;border:1px solid #343946;border-radius:10px;cursor:pointer}.char img{width:65px;height:65px;object-fit:cover;border-radius:50%;float:left;margin-right:10px}
+.notice{padding:11px;border-radius:9px;background:#201d12;border:1px solid #69571d;color:#ddd}
+@media(max-width:600px){.wrap{padding:10px}header{padding:14px}}
+
+html,body{min-height:100%;overscroll-behavior:none}body{-webkit-tap-highlight-color:transparent}button,select,input,textarea{font:inherit}.hero{background:linear-gradient(to bottom,rgba(0,0,0,.08),rgba(0,0,0,.78)),url("background.png") center/cover no-repeat;min-height:calc(100svh - 70px);display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:36px}.hero h1,.hero p{text-shadow:0 2px 10px #000}
+</style>
+</head>
+<body>
+<header><div><div class="brand">A CAÇADA</div><div class="sub">Sistema de RPG</div></div><button class="btn" onclick="go('home')">Início</button></header>
+<main class="wrap">
+
+<section id="home" class="screen active"><div class="hero"><h1>A CAÇADA</h1><p>Fichas, campanhas, caminhos, afinidades, respirações, sangue e rolagens.</p><div class="notice" style="max-width:700px;margin:12px auto">V7: campanhas compartilhadas entre celulares usando banco online.</div>
+<div class="menu">
+<button class="btn gold" onclick="go('campaigns')"><b>Campanhas</b><br><span class="small">Entrar por código ou link</span></button>
+<button class="btn" onclick="newCampaign()"><b>Criar campanha</b><br><span class="small">Criar uma nova sala</span></button>
+<button class="btn" onclick="go('chars')"><b>Minhas fichas</b><br><span class="small">Personagens salvos</span></button>
+</div></div></section>
+
+<section id="campaigns" class="screen"><button class="btn" onclick="go('home')">← Voltar</button><div id="onlineStatus" class="notice" style="margin-top:15px">Conectando ao banco online...</div>
+<div class="card" style="margin-top:15px"><h2>Entrar em campanha</h2><label>Link ou código</label><input id="campInput" placeholder="ACACADA-XXXX ou cole o link"><button class="btn gold" style="margin-top:10px" onclick="enterCampaign()">Entrar</button></div>
+<div class="card" style="margin-top:15px"><h3>Campanhas neste navegador</h3><div id="campList"></div></div></section>
+
+<section id="lobby" class="screen"><button class="btn" onclick="go('home')">← Início</button>
+<div class="card" style="margin-top:15px"><h1 id="campTitle"></h1><p class="small">Código: <b id="campCode"></b></p><button class="btn gold" onclick="copyInvite()">Copiar link da sala</button></div>
+<div class="card" style="margin-top:15px"><h2>Jogar</h2><p class="small">Escolha um personagem para abrir sua ficha.</p><div id="campChars" class="chars"></div><button class="btn" onclick="createCharFromCamp()">+ Criar personagem</button></div></section>
+
+<section id="chars" class="screen"><button class="btn" onclick="go('home')">← Voltar</button><div class="bar"><button class="btn gold" onclick="newChar()">+ Nova ficha</button> <button class="btn" onclick="go('dice')">🎲 Girar</button></div><div id="charList" class="chars"></div></section>
+
+<section id="sheet" class="screen"><button class="btn" onclick="camp?go('lobby'):go('chars')">← Voltar</button>
+<div class="grid">
+<div class="card"><h2>Ficha base</h2><img id="avatar" class="avatar" alt="Personagem"><input id="img" type="file" accept="image/*">
+<label>Nome</label><input id="name"><label>Caminho</label><select id="path" onchange="updateChoices()"><option>Mestre do Ar</option><option>Sanguíneo</option></select>
+<label>Gênero</label><select id="gender" onchange="updateChoices()"><option>Homem</option><option>Mulher</option><option>Não binário</option></select>
+<label>Raça</label><select id="race" onchange="updateChoices()"></select>
+<div id="pathHelp" class="notice" style="margin-top:10px"></div>
+<label>História</label><textarea id="story"></textarea></div>
+<div class="card"><h2>Afinidade</h2><div class="grid"><div><label>Caminho</label><select id="affType" onchange="updateChoices()"><option>Ar</option><option>Sangue</option></select></div><div><label>Nível de afinidade (0–100)</label><input id="aff" type="number" min="0" max="100" value="0" oninput="updateAffinity()"></div></div>
+<div class="meter"><div id="affMeter"></div></div><div id="affText" class="small"></div><div id="unlockText" class="notice" style="margin-top:10px"></div></div>
+<div class="card"><h2>Recursos</h2><div class="stat"><span>PV</span><input id="pv" type="number"></div><div class="stat"><span>PE</span><input id="pe" type="number"></div><p class="small">PV = 10 + Vigor × 5<br>PE = 7 + Vigor × 3</p></div></div>
+
+<div class="card" style="margin-top:15px"><h2>Atributos</h2><div id="attrs" class="grid"></div></div>
+
+<div class="card" style="margin-top:15px"><h2>Perícias</h2><div id="skills" class="grid"></div><p class="small">O nível da perícia entra automaticamente no teste.</p></div>
+
+<div class="grid" style="margin-top:15px">
+<div class="card"><h2>Passivas automáticas</h2><div id="passives"></div></div>
+<div class="card"><h2>Respiração / Estilo</h2><div id="styleArea"></div></div>
+</div>
+
+<div class="card" style="margin-top:15px"><h2>Competências / Técnicas</h2><p class="small">Cada técnica é liberada por marco de Afinidade: 20, 40, 60, 80 e 100.</p><div id="abilities"></div></div><div class="card" style="margin-top:15px"><h2>Respirações derivadas</h2><div id="derivativeArea"></div></div>
+<div id="specialBreaths" class="card" style="margin-top:15px"><h2>Respirações especiais</h2><div class="style locked"><h4>☀ Respiração do Sol — BLOQUEADA</h4><p>Requer senha de desbloqueio.</p><input id="sunPass" placeholder="Senha"><button class="btn" onclick="unlockSun()">Desbloquear</button><div id="sunMsg" class="small"></div></div>
+<div class="style locked"><h4>☾ Respiração da Lua — BLOQUEADA</h4><p>Requer senha de desbloqueio.</p><input id="moonPass" placeholder="Senha"><button class="btn" onclick="unlockMoon()">Desbloquear</button><div id="moonMsg" class="small"></div></div>
+<p class="small">As habilidades detalhadas de Sol e Lua ficam para a próxima atualização do livro do mestre.</p></div>
+
+<div class="card" style="margin-top:15px"><button class="btn gold" onclick="saveChar()">Salvar ficha</button> <button class="btn" onclick="deleteCurrentChar()">Excluir ficha</button></div>
+</section>
+
+<section id="dice" class="screen"><button class="btn" onclick="go('chars')">← Voltar</button><div class="notice" style="margin-top:15px"><b>Girar</b> é separado da edição das fichas. As regras abaixo só são aplicadas quando você faz um teste. Elas não alteram os atributos salvos do personagem.<br><br><b>Força, Destreza e Inteligência:</b> bônus = atributo − 4, nunca abaixo de 0. Ex.: 4 = +0, 5 = +1, 7 = +3.<br><b>Perícias:</b> o valor da perícia é somado ao teste e recebe <b>+2</b> quando aquela perícia é usada.</div><div class="grid" style="margin-top:15px">
+<div class="card"><h2>Teste de atributo</h2><select id="da"></select><button class="btn gold" style="margin-top:10px;width:100%" onclick="attributeRoll()">Girar 1d20 + bônus</button><div id="ar" class="result">—</div></div>
+<div class="card"><h2>Teste de perícia</h2><select id="ds"></select><button class="btn gold" style="margin-top:10px;width:100%" onclick="skillRoll()">Girar 1d20 + perícia + 2</button><div id="sr" class="result">—</div></div>
+<div class="card"><h2>Dano</h2><input id="dn" type="number" min="1" value="1"><button class="btn" style="margin-top:10px;width:100%" onclick="damageRoll()">Rolar d6</button><div id="dr" class="result">—</div></div>
+<div class="card"><h2>Histórico</h2><div id="rollLog" class="log"></div></div></div></section>
+</main>
+
+<script src="config.js"></script>
+<script>
+const ATTR=["Força","Destreza","Vigor","Inteligência","Carisma","Instinto"];
+const SK=["Combate Corpo a Corpo","Uso de Armas","Furtividade","Percepção","Sobrevivência","Cura e Primeiros Socorros","Conhecimento","Empatia e Liderança","Agilidade e Equilíbrio","Força e Resistência"];
+const BREATHS=[["Água","Principal",null,[["Golpe da Onda","Ilimitado",2,"Você avança com a lâmina deslizando como uma onda e desfere um corte contínuo. O ataque é rápido e pode ser repetido sem perder ritmo."],["Natação na Corrente","Ilimitado",1,"Você se move pela água, pelo ar ou pelo terreno com leveza, como se estivesse nadando em uma correnteza. Ganha +1 em testes de agilidade e deslocamento durante o movimento."],["Jorro de Água","Por Batalha",4,"Você concentra a respiração e lança um corte que se alarga no caminho, atingindo até dois inimigos ao mesmo tempo."],["Mar em Fúria","Por Descanso",6,"Você gira e ataca em todas as direções ao redor, criando uma barreira de cortes. Ninguém consegue se aproximar sem ser atingido, e você ganha +2 em defesa neste turno."],["Forma da Água Eterna","Por Sessão",8,"Você se torna um com o elemento. Seus golpes fluem sem interrupção: por 3 turnos, todos os ataques de Golpe da Onda custam metade da estamina e acertam com mais força."]]],["Chamas","Principal",null,[["Chama Rápida","Ilimitado",2,"Um corte direto e veloz que carrega fogo na lâmina. Simples, mas cresce em potência conforme o ímpeto do usuário."],["Aquecimento","Ilimitado",1,"Você exala calor e mantém o corpo aquecido. Resiste melhor ao frio e a ambientes gelados, e recupera 1 PE extra por turno enquanto estiver em movimento."],["Pilar de Fogo","Por Batalha",4,"Você corta para cima, erguendo uma coluna de chamas que atinge o inimigo e o ar ao redor. Pode bloquear visão ou impedir aproximação por um turno."],["Explosão Carmesim","Por Descanso",6,"Você avança envolto em fogo e desfere um golpe concentrado no centro do impacto. O dano é muito alto e pode queimar armaduras ou superfícies frágeis."],["Sol Ardente","Por Sessão",8,"Você atinge o auge da chama. Por 3 turnos, todos os golpes deixam chamas que persistem no alvo, causando dano adicional a cada turno, e você não sofre penalidade por calor intenso."]]],["Trovão","Principal",null,[["Relâmpago em Queda","Ilimitado",2,"Você avança em linha reta com velocidade de raio e desfere um golpe no instante do impacto. O movimento é curto, mas quase impossível de desviar."],["Passo Elétrico","Ilimitado",1,"Você dá um salto instantâneo de curta distância. Pode trocar de posição rapidamente, aparecer ao lado do inimigo ou escapar de um cerco."],["Choque Duplo","Por Batalha",4,"Você ataca uma vez e já retorna para golpear de novo quase no mesmo instante. Dois golpes rápidos que somam muito dano se ambos acertarem."],["Trovoada Esmagadora","Por Descanso",6,"Você concentra toda a força em um único golpe que cai com peso de um trovão. O som ensurdece e atordoa o alvo, que tem -1 em defesa no turno seguinte."],["Descarga Total","Por Sessão",8,"Você se torna pura energia em movimento. Por 3 turnos, seus golpes atordoam quem recebe, e o Passo Elétrico não gasta estamina. Ninguém consegue prever de onde virá o próximo ataque."]]],["Vento","Principal",null,[["Lâmina de Vento","Ilimitado",2,"Um corte que projeta uma lâmina de ar afiado. Ataca de distância e pode ser lançado em sequência."],["Asas do Vento","Ilimitado",1,"Você salta, desliza e cai suavemente, como se tivesse asas. Pode atravessar espaços altos, saltar mais longe e amortecer quedas sem sofrer dano."],["Corte Ciclônico","Por Batalha",4,"Você gira no ar e desfere vários cortes ao mesmo tempo. Difícil de defender e pode atingir inimigos em posições diferentes."],["Tempestade Cortante","Por Descanso",6,"Você cria um redemoinho de vento ao redor de si. Desvia projéteis, afasta inimigos e corta tudo que estiver no alcance imediato."],["Vento Sem Fim","Por Sessão",8,"Você se move com velocidade quase impossível de acompanhar. Por 3 turnos, seus ataques ganham +2 de precisão e você pode agir duas vezes por turno, mas só com movimentos de ataque ou deslocamento."]]],["Pedra","Principal",null,[["Martelo de Rocha","Ilimitado",2,"Um golpe lento, mas pesado o suficiente para rachar chão. Quanto mais forte o usuário, maior o dano."],["Base Firme","Ilimitado",1,"Você planta os pés e não é empurrado nem derrubado. Resiste a golpes que moveriam pessoas comuns e ganha +1 em testes de Força para não ser deslocado."],["Laje Protetora","Por Batalha",4,"Você levanta a lâmina e bloqueia com força total. Reduz pela metade o dano de um ataque que receberia neste turno."],["Desmoronamento","Por Descanso",6,"Você golpeia o chão ou a defesa do inimigo com força devastadora. Pode quebrar escudos, derrubar estruturas ou abrir caminho por terrenos bloqueados."],["Montanha Imóvel","Por Sessão",8,"Você se torna uma muralha viva. Por 3 turnos, recebe metade do dano de todos os ataques físicos e não pode ser derrubado, empurrado ou assustado. Aliados próximos também ganham +1 de defesa. RESPIRAÇÕES DERIVADAS Criadas por caçadores ao longo das eras para se adaptarem melhor às suas próprias capacidades físicas. Derivadas da Água"]]],["Flor","Derivada","Água",[["Pétala Cortante","Ilimitado",2,"Golpe leve e rápido que ataca pontos sensíveis. Acerta com facilidade, embora cause dano moderado."],["Caule Forte","Ilimitado",1,"Postura estável e equilibrada. Dificulta que o usuário seja desequilibrado e dá +1 em defesa contra ataques de empurrão."],["Desabrochar","Por Batalha",4,"Vários cortes em leque, como uma flor se abrindo. Atinge inimigos em uma área ampla à sua frente."],["Espreita do Jardim","Por Descanso",6,"Movimento silencioso e focado. Você se aproxima sem ser notado e desfere um golpe que acerta com vantagem, ignorando parte da defesa."],["Flor da Tarde","Por Sessão",8,"Por 3 turnos, seus golpes ficam cada vez mais rápidos e precisos. Ganha +1 de acerto a cada ataque consecutivo no mesmo alvo."]]],["Inseto","Derivada","Água",[["Enxame Cortante","Ilimitado",2,"Vários cortes pequenos e rápidos em sequência. Não causa dano enorme de uma vez, mas acumula feridas que somam muito com o tempo."],["Voo Rasteiro","Ilimitado",1,"Você se agacha e corre rente ao chão, desviando com movimentos imprevisíveis. Dificulta a mira dos inimigos e permite passar por lugares apertados."],["Ferrão Venenoso","Por Batalha",4,"Um golpe certeiro em um ponto sensível. Causa sangramento leve que persiste por 2 turnos, a menos que seja tratado."],["Asas Transparentes","Por Descanso",6,"Você se move tão rápido que deixa apenas uma sombra no lugar. Pode atravessar o campo de batalha sem ser atingido e atacar de trás sem risco de emboscada."],["Domínio do Enxame","Por Sessão",8,"Você ataca em tantas direções ao mesmo tempo que parece ser vários. Por 3 turnos, todos os inimigos próximos têm -1 em defesa, e você pode fazer um ataque extra por turno."]]],["Serpente","Derivada","Água",[["Mordida Rápida","Ilimitado",2,"Um golpe curto e certeiro que sai de um movimento suave e sem aviso. Difícil de perceber até acontecer."],["Deslizar Silencioso","Ilimitado",1,"Você se move sem fazer barulho, contornando obstáculos e sombras. Ganha +2 em furtividade enquanto estiver fora de combate ou se escondendo."],["Golpe de Ângulo Impossível","Por Batalha",4,"Você ataca de uma posição que não parece ter alcance. O inimigo não pode usar bônus de escudo ou bloqueio nesse golpe."],["Constrição","Por Descanso",6,"Você envolve o inimigo com cortes contínuos, impedindo que ele fuja ou se afaste. Se tentar se mover, recebe um golpe de oportunidade."],["Visão da Cobra","Por Sessão",8,"Você enxerga os movimentos do inimigo antes que ele se decida. Por 3 turnos, ganha +2 em Percepção e pode desviar de um ataque por turno sem gastar estamina. Derivada das Chamas"]]],["Amor","Derivada","Chamas",[["Golpe Afetuoso","Ilimitado",2,"Ataque rápido e gracioso que pega o inimigo de surpresa. Não é pesado, mas acerta com frequência."],["Salto da Paixão","Ilimitado",1,"Você salta distâncias maiores e cai com leveza, como se flutuasse. Permite mudar de posição rapidamente no campo de batalha."],["Flecha do Carinho","Por Batalha",4,"Um corte que avança em linha reta com brilho e calor. Atinge o alvo e deixa uma sensação de calor que reduz sua velocidade em -1 por um turno."],["Abraço Quente","Por Descanso",6,"Você gira com a lâmina abrindo caminho ao redor. Afasta inimigos próximos e cria espaço para os aliados se aproximarem."],["Brilho Eterno","Por Sessão",8,"Por 3 turnos, você brilha com energia calorosa. Aliados próximos recuperam 1 PE por turno, e seus golpes ganham +2 de dano. Derivada do Trovão"]]],["Som","Derivada","Trovão",[["Batida Rítmica","Ilimitado",2,"Golpe no compasso de um som interno. Quanto mais acerta, mais forte fica o próximo ataque."],["Ouvido Atento","Ilimitado",1,"Você escuta movimentos e respirações. Ganha +2 em Percepção auditiva e não é pego de surpresa por aproximações silenciosas."],["Estrondo Desorientador","Por Batalha",4,"Golpe que gera um som alto e abrupto. O alvo fica atordoado e tem -1 em defesa no próximo turno."],["Dança dos Decibéis","Por Descanso",6,"Sequência de golpes em ritmos diferentes. Difícil de prever ou bloquear, pois cada ataque vem de um ângulo diferente."],["Sinfonia Final","Por Sessão",8,"Por 3 turnos, cada ataque bem-sucedido aumenta o volume e a força. Acumula +1 de dano por golpe consecutivo no mesmo inimigo. Derivadas do Vento"]]],["Névoa","Derivada","Vento",[["Névoa Cortante","Ilimitado",2,"Golpe que aparece de repente entre a névoa. Difícil de prever de onde vem."],["Desaparecer","Ilimitado",1,"Você se mistura com sombras, fumaça ou neblina. Torna-se difícil de mirar até atacar de novo."],["Espiral Confusa","Por Batalha",4,"Movimentos que não seguem lógica previsível. O inimigo tem -1 para acertá-lo neste turno."],["Véu de Ilusão","Por Descanso",6,"Você cria a impressão de estar em outro lugar. O inimigo pode atacar uma imagem falsa enquanto você golpeia de verdade de outro lado."],["Névoa Sem Fim","Por Sessão",8,"Por 3 turnos, você se move tão rápido que deixa imagens posteriores. O inimigo não sabe qual é você de verdade e tem -2 para acertá-lo."]]],["Fera","Derivada","Vento",[["Garra Feroz","Ilimitado",2,"Golpe direto e agressivo, como uma pata que desce com força. Simples, mas imparável."],["Faro Predatório","Ilimitado",1,"Você sente a presença de todos ao redor, mesmo sem ver. Não é surpreendido por costas ou esconderijos."],["Mordida Rasgante","Por Batalha",4,"Ataque que agarra e puxa ao mesmo tempo. Pode desequilibrar o inimigo e abrir brecha para um golpe seguinte."],["Uivo Selvagem","Por Descanso",6,"Grito e investida que intimidam inimigos próximos. Eles têm -1 em ataque no primeiro turno seguinte."],["Sexta Forma","Caça Total — Por Sessão",8,"Por 3 turnos, você ataca sem parar, movendo-se com instinto puro. Ganha +2 de acerto e pode ignorar terreno difícil enquanto persegue o alvo."]]]];
+const BLOOD=[["Fogo Sanguíneo",[["Lâmina de Fogo","Ilimitado",2,"O sangue aquece e irrompe em chamas ao redor das mãos ou armas. Cada golpe carrega fogo que queima no contato."],["Pele Incandescente","Ilimitado",1,"O corpo irradia calor. Quem tenta agarrar ou atacar de perto recebe dano leve de queimadura. Também derrete gelo e afasta criaturas sensíveis ao calor."],["Onda de Labaredas","Por Batalha",4,"Uma explosão de fogo avança em linha reta. Queima tudo no caminho e pode deixar o solo em chamas por um turno."],["Inferno Pessoal","Por Descanso",6,"Uma esfera de fogo envolve o usuário. Ninguém se aproxima sem sofrer queimaduras graves, e todos os golpes ganham +2 de dano por 2 turnos."],["Chama Eterna","Por Sessão",8,"Por 3 turnos, o fogo não se apaga nem com água ou vento. Os golpes deixam chamas persistentes que causam dano adicional a cada turno, e o usuário recupera 1 PE a cada inimigo que sofre dano pelo fogo."]]],["Gelo Sanguíneo",[["Toque Gélido","Ilimitado",2,"O contato congela partes do alvo. Reduz a velocidade do inimigo em -1 por 1 turno."],["Armadura de Gelo","Ilimitado",1,"Cristais de gelo surgem sobre a pele. Bloqueiam golpes leves e dão +1 de defesa contra ataques físicos."],["Lâminas Congeladas","Por Batalha",4,"Cria lâminas afiadas de gelo que se projetam das mãos ou do chão. Atacam de distância e podem prender os pés do inimigo."],["Névoa Congelante","Por Descanso",6,"Uma névoa gelada cobre a área. A visão fica difícil, e quem permanece nela sofre -1 de velocidade a cada turno. Pode congelar poças, rios e superfícies para criar deslizamento."],["Inverno Absoluto","Por Sessão",8,"Por 3 turnos, o frio se torna intenso o suficiente para parar movimentos rápidos. Todos os inimigos têm -2 de velocidade e não podem correr. Água e líquidos ao redor congelam instantaneamente."]]],["Veneno Sanguíneo",[["Golpe Envenenado","Ilimitado",2,"Imbui a arma ou as garras com veneno leve. Causa dano contínuo por 2 turnos, a menos que seja tratado."],["Resistência Tóxica","Ilimitado",1,"O corpo produz antitoxinas constantemente. O usuário é imune a venenos, paralisia e doenças comuns."],["Névoa da Pele","Por Batalha",4,"Libera uma nuvem de gás venenoso ao redor. Quem respira sente fraqueza e tem -1 de Força por 2 turnos. O usuário não é afetado."],["Toxina Paralisante","Por Descanso",6,"Um golpe direto injeta veneno concentrado. O alvo tem dificuldade de se mover e perde um turno de ação parcial. Efeito dura até ser curado ou passarem 2 turnos."],["Sangue Corrosivo","Por Sessão",8,"Por 3 turnos, o sangue reage ao ar como ácido. Quem ataca de perto ou morder recebe dano severo. O veneno aplicado em golpes agora causa dano duas vezes mais rápido e não pode ser curado com métodos comuns — precisa de descanso longo ou antídoto especial."]]],["Tambores da Terra",[["Espinho Rápido","Ilimitado",2,"Bate o pé e um espinho de rocha ou osso irrompe do chão sob o inimigo. Dificulta movimento e causa dano moderado."],["Peso do Solo","Ilimitado",1,"Altera levemente a gravidade ao redor de si. Pode pular mais alto, cair mais devagar e impulsionar-se com força maior. Ganha +1 em testes de Força para avançar ou segurar posição."],["Lâminas Subterrâneas","Por Batalha",4,"Várias lâminas afiadas surgem em sequência do chão em linha reta ou em círculo. Atingem inimigos que tentam cercar ou fugir."],["Gravidade Pesada","Por Descanso",6,"Aumenta a gravidade em uma área ao redor. Inimigos têm -2 de velocidade e não conseguem saltar. Efeito dura 2 turnos."],["Domínio do Terreno","Por Sessão",8,"Por 3 turnos, o usuário comanda o chão inteiro. Pode erguer muralhas, abrir fendas, criar pontes ou fazer espinhos surgirem onde quiser. Ninguém consegue se esconder no solo ou usar terreno para vantagem contra ele."]]],["Consumismo",[["Devorar Feridas","Ilimitado",2,"Ao comer um pedaço de carne ou matéria orgânica, recupera vida lentamente. Pode fazer isso no meio da luta, mas precisa ter algo para consumir."],["Fome Crescente","Ilimitado",1,"Cada vez que causa dano grave a um inimigo, ganha +1 temporário em Força ou Velocidade. O bônus acumula até 3 vezes e dura até o fim da batalha."],["Aumento Súbito","Por Batalha",4,"A força concentrada explode de uma vez. Cresce em tamanho e densidade por 1 turno. Ganha +2 de dano em golpes físicos e não pode ser derrubado nesse período."],["Carne Recomposta","Por Descanso",6,"Regenera ossos quebrados, feridas profundas e até membros perdidos, consumindo grande quantidade de matéria orgânica. Recupera metade da vida perdida."],["Forma Absoluta","Por Sessão",8,"Por 3 turnos, atinge o auge do que consumiu. Ganha +2 em Força, Velocidade e Resistência ao mesmo tempo. Cada inimigo derrotado durante esse tempo estende o efeito por mais 1 turno. Quando termina, cai em exaustão profunda — a fome é insuportável e o corpo precisa de descanso imediato."]]]];
+const DERIVATIONS={"Água":["Flor","Inseto","Serpente"],"Chamas":["Amor"],"Trovão":["Som"],"Vento":["Névoa","Fera"],"Pedra":[]};
+let chars=JSON.parse(localStorage.getItem("chars")||"[]"),current=null,camp=null;
+
+function loadCampaignFromHash(){
+ const h=location.hash||'';
+ if(!h.startsWith('#camp='))return;
+ const code=decodeURIComponent(h.slice(6));
+ const raw=localStorage.getItem('camp_'+code);
+ if(raw){openCamp(JSON.parse(raw));return}
+ alert('Este link de campanha foi aberto neste aparelho, mas a campanha ainda não está sincronizada online. Para compartilhamento real entre celulares, será necessário um banco de dados online.');
+}
+const $=id=>document.getElementById(id);
+function go(id){document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));document.getElementById(id).classList.add("active");if(id==="chars")renderChars();if(id==="campaigns")renderCamps();if(id==="dice")setupDice()}
+function rid(){return Math.random().toString(36).slice(2,8).toUpperCase()}
+function newCampaign(){let c={id:rid(),name:"A Caçada — Nova Campanha",chars:[]};localStorage.setItem("camp_"+c.id,JSON.stringify(c));openCamp(c)}
+function renderCamps(){let b=document.getElementById("campList"),ks=Object.keys(localStorage).filter(k=>k.startsWith("camp_"));b.innerHTML=ks.length?ks.map(k=>{let c=JSON.parse(localStorage[k]);return `<div class="card"><b>${c.name}</b><div class="small">Código: ${c.id}</div><button class="btn" onclick='openCamp(${JSON.stringify(c)})'>Abrir</button></div>`}).join(""):"<p class='small'>Nenhuma campanha criada.</p>"}
+function enterCampaign(){let v=campInput.value.trim().split("/").pop().replace("#camp=","");let c=JSON.parse(localStorage.getItem("camp_"+v));if(c)openCamp(c);else alert("Campanha não encontrada neste navegador. A versão online usará banco de dados para compartilhar a sala entre dispositivos.")}
+function openCamp(c){camp=c;campTitle.textContent=c.name;campCode.textContent=c.id;renderCampChars();go("lobby")}
+function copyInvite(){let link=location.href.split("#")[0]+"#camp="+camp.id;navigator.clipboard?.writeText(link);alert("Link copiado: "+link)}
+function renderCampChars(){campChars.innerHTML=camp.chars.length?camp.chars.map(cid=>{let c=chars.find(x=>x.id===cid);return c?`<div class="char" onclick="openChar('${c.id}')"><img src="${c.img||''}"><b>${c.name}</b><div class="small">${c.race}</div></div>`:""}).join(""):"<p class='small'>Nenhum personagem ainda.</p>"}
+function createCharFromCamp(){newChar();let c=chars[chars.length-1];if(camp){camp.chars.push(c.id);localStorage.setItem("camp_"+camp.id,JSON.stringify(camp));}}
+function newChar(){let c={id:rid(),name:"Novo personagem",gender:"Homem",path:"Mestre do Ar",race:"Humano",story:"",affType:"Ar",aff:0,breath:"",blood:"",attrs:Object.fromEntries(ATTR.map(a=>[a,5])),skills:Object.fromEntries(SK.map(s=>[s,0])),pv:25,pe:15,img:"",sun:false,moon:false};chars.push(c);localStorage.setItem("chars",JSON.stringify(chars));openChar(c.id)}
+function renderChars(){charList.innerHTML=chars.length?chars.map(c=>`<div class="char" onclick="openChar('${c.id}')"><img src="${c.img||''}"><b>${c.name}</b><div class="small">${c.race} • ${c.gender}</div></div>`).join(""):"<p class='small'>Nenhuma ficha.</p>"}
+function openChar(cid){current=chars.find(c=>c.id===cid);if(!current)return;readOnly=false;fillSheet();go("sheet");applyReadOnly()}
+function fillSheet(){
+ const q=id=>$(id);
+ q("name").value=current.name||"";q("gender").value=current.gender||"Homem";q("path").value=current.path||"Mestre do Ar";q("race").value=current.race||"Humano";q("story").value=current.story||"";q("affType").value=current.affType||"Ar";q("aff").value=Number(current.aff||0);q("pv").value=Number(current.pv||0);q("pe").value=Number(current.pe||0);q("avatar").src=current.img||"";q("attrs").innerHTML=ATTR.map(a=>`<div class="stat"><span>${a}</span><input data-a="${a}" type="number" min="1" max="7" value="${Number(current.attrs?.[a]??5)}" oninput="recalc()"></div>`).join("");q("skills").innerHTML=SK.map(s=>`<div class="stat"><span>${s}</span><input data-s="${s}" type="number" min="0" max="20" value="${Number(current.skills?.[s]??0)}"></div>`).join("");updateChoices()}
+function recalc(){const v=Number(document.querySelector('[data-a="Vigor"]')?.value||0);$("pv").value=10+v*3;$("pe").value=10+v}
+function updateAffinity(){let v=Math.max(0,Math.min(100,Number($("aff").value||0)));$("aff").value=v;if(current)current.aff=v;let k=current?.path==='Sanguíneo'?'Sangue':'Ar';$("affMeter").style.width=v+'%';$("affText").textContent=`Afinidade ${k}: ${v}/100`;$("unlockText").textContent=v>=100?'Afinidade máxima — 5 técnicas disponíveis.':`Próximo marco: ${Math.ceil((v+0.01)/20)*20}/100.`;if(current){renderAbilities();renderDerivativeChoice()}}
+function updateChoices(){
+if(!current)return;
+const oldPath=current.path;
+const selectedRace=$("race").value || current.race;
+current.gender=$("gender").value;
+current.path=$("path").value;
+const races=current.path==='Mestre do Ar'?['Humano']:['Devorador de Oni','Oni Amigável'];
+if(current.path!==oldPath){current.aff=0;current.breath='';current.blood='';$("aff").value=0}
+if(current.path==='Mestre do Ar'){
+ current.race='Humano';
+}else{
+ current.race=races.includes(selectedRace)?selectedRace:(races.includes(current.race)?current.race:races[0]);
+}
+$("race").innerHTML=races.map(r=>`<option value="${r}">${r}</option>`).join('');
+$("race").value=current.race;
+if(current.path==='Mestre do Ar'){current.affType='Ar';$("affType").value='Ar';$("affType").disabled=true;$("pathHelp").textContent='Mestre do Ar: Humano obrigatório. Use uma Respiração e evolua pela Afinidade com o Ar.'}
+else{current.affType='Sangue';$("affType").value='Sangue';$("affType").disabled=true;$("pathHelp").textContent=current.race==='Devorador de Oni'?'Sanguíneo → Devorador de Oni: sem Respiração e sem Técnica de Sangue própria.':'Sanguíneo → Oni Amigável: escolha uma Arte/Técnica de Sangue e evolua pela Afinidade com o Sangue.'}
+updateAffinity();renderPassives();renderStyles();recalc();
+}
+function renderPassives(){
+let p="";
+p+=`<div class="passive"><b>Gênero: ${current.gender}</b><br>${g[current.gender]}</div>`;
+if(current.path==="Mestre do Ar"){
+ p+=`<div class="passive"><b>Mestre do Ar</b><br>Humano obrigatório. Caminho de Respiração; a Conexão com o Ar desbloqueia as habilidades da Respiração.</div>`;
+}else if(current.race==="Devorador de Oni"){
+ p+=`<div class="passive"><b>Devorador de Oni</b><br>Ao consumir carne ou sangue de Oni, entra temporariamente em uma forma com força, velocidade e regeneração de Oni. A transformação dura 43 minutos e depois causa grande exaustão. Não pode usar Respirações.</div>`;
+}else{
+ p+=`<div class="passive"><b>Oni Amigável</b><br>Não possui Respiração. Sua afinidade é com o Sangue; não fala com clareza e a luz do sol pode ser fatal. Pode desenvolver uma Técnica de Sangue.</div>`;
+}
+passives.innerHTML=p;
+}
+function renderStyles(){
+if(current.path==="Mestre do Ar"){
+ let mains=BREATHS.filter(x=>x[1]==="Principal");
+ styleArea.innerHTML=`<div class="notice"><b>Mestre do Ar</b><br>Escolha uma Respiração. A Afinidade com o Ar libera as técnicas em marcos de 20.</div><label>Respiração atual</label><select onchange="changeBreath(this.value)"><option value="">Selecione</option>${mains.map(x=>`<option ${current.breath===x[0]?"selected":""}>${x[0]}</option>`).join("")}</select>`;
+}else if(current.race==="Oni Amigável"){
+ styleArea.innerHTML=`<div class="notice"><b>Arte/Técnica de Sangue</b><br>Escolha um Estilo de Sangue. A Afinidade com o Sangue libera suas técnicas em marcos de 20.</div><label>Estilo atual</label><select onchange="changeBlood(this.value)"><option value="">Selecione</option>${BLOOD.map(x=>`<option ${current.blood===x[0]?"selected":""}>${x[0]}</option>`).join("")}</select>`;
+}else{styleArea.innerHTML=`<div class="notice"><b>Devorador de Oni</b><br>Este caminho não possui Respiração nem Técnica de Sangue própria.</div>`}
+renderAbilities();renderDerivativeChoice();renderSpecialBreaths();
+}
+function changeBreath(v){if(!v)return;current.breath=v;current.aff=0;saveChar(false);$("aff").value=0;updateAffinity();renderStyles()}
+function changeBlood(v){if(!v)return;current.blood=v;current.aff=0;saveChar(false);$("aff").value=0;updateAffinity();renderStyles()}
+function abilityCards(list,affinity){return list.map((a,i)=>{let req=(i+1)*20,ok=affinity>=req;return `<div class="style ${ok?"":"locked"}"><h4>${ok?"🔓":"🔒"} ${i+1}. ${a[0]} <span class="pill">${req} Afinidade</span></h4><div class="small">${a[1]} • ${a[2]} PE</div><p>${a[3]}</p>${ok?`<button class="btn gold" onclick="useAbility('${a[0].replace(/'/g,"\\'")}',${a[2]})">Usar técnica</button>`:`<div class="small">Bloqueada até ${req} de Afinidade.</div>`}</div>`}).join('')}
+function renderAbilities(){let box=document.getElementById('abilities');if(current.path==='Mestre do Ar'){if(!current.breath){box.innerHTML='<div class="small">Escolha uma Respiração para ver seus ataques e habilidades.</div>';return}let b=BREATHS.find(x=>x[0]===current.breath);box.innerHTML=abilityCards(b[3],+current.aff)}else if(current.race==='Oni Amigável'){if(!current.blood){box.innerHTML='<div class="small">Escolha uma Arte/Técnica de Sangue para ver seus ataques e habilidades.</div>';return}let b=BLOOD.find(x=>x[0]===current.blood);box.innerHTML=abilityCards(b[1],+current.aff)}else box.innerHTML='<div class="small">Nenhuma técnica de Respiração/Sangue disponível neste caminho.</div>'}
+function useAbility(n,cost){let p=Number($("pe").value)||0;if(p<cost)return alert('PE insuficiente.');$("pe").value=p-cost;current.pe=p-cost;saveChar(false);log(`Técnica usada: ${n} (-${cost} PE)`);renderAbilities()}
+function renderDerivativeChoice(){let box=document.getElementById('derivativeArea');if(current.path!=='Mestre do Ar'||!current.breath){box.innerHTML='<div class="small">Escolha uma Respiração principal para ver as derivações disponíveis.</div>';return}let b=BREATHS.find(x=>x[0]===current.breath);if(b[1]==='Derivada'){box.innerHTML=`<div class="notice">Você está usando a Respiração Derivada <b>${current.breath}</b>. A afinidade foi zerada ao fazer a troca e agora progride normalmente.</div>`;return}let ds=DERIVATIONS[current.breath]||[];if(+current.aff<50){box.innerHTML=`<div class="small">Ao chegar a <b>50 de Afinidade</b>, você pode manter ${current.breath} ou escolher uma derivação. Se trocar, a Afinidade da nova Respiração começa em 0.</div>`;return}box.innerHTML=`<div class="notice"><b>50 de Afinidade alcançados.</b><br>Você pode manter a Respiração atual ou trocar para uma derivada. Ao trocar, a nova Afinidade será 0.</div>${ds.length?'<div class="bar">'+ds.map(d=>`<button class="btn" onclick="switchDerivative('${d}')">Trocar para ${d}</button>`).join('')+'</div>':'<div class="small">Não há derivação listada para esta Respiração.</div>'}`}
+function switchDerivative(n){if(+current.aff<50)return alert('É necessário alcançar 50 de Afinidade.');if(!confirm(`Trocar para ${n}? A Afinidade será zerada.`))return;current.breath=n;current.aff=0;$("aff").value=0;saveChar(false);updateAffinity();renderStyles()}
+function renderSpecialBreaths(){let e=document.getElementById('specialBreaths');if(!e)return;e.style.display=current.path==='Mestre do Ar'?'block':'none'}
+function saveChar(show=true){if(!current)return;if(readOnly)return alert('Você só pode editar a sua própria ficha.');current.name=$("name").value;current.gender=$("gender").value;current.path=$("path").value;current.race=$("race").value;current.story=$("story").value;current.affType=$("affType").value;current.aff=Number($("aff").value||0);current.pv=Number($("pv").value||0);current.pe=Number($("pe").value||0);ATTR.forEach(a=>{const e=document.querySelector(`[data-a="${a}"]`);if(e)current.attrs[a]=Number(e.value)});SK.forEach(sk=>{const e=document.querySelector(`[data-s="${sk}"]`);if(e)current.skills[sk]=Number(e.value)});localStorage.setItem("chars",JSON.stringify(chars));if(show)alert("Ficha salva.")}
+$("img").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{current.img=r.result;$("avatar").src=r.result;saveChar(false)};r.readAsDataURL(f)}
+function unlockSun(){if($("sunPass").value==="sol 1"){current.sun=true;sunMsg.textContent="Respiração do Sol liberada.";sunPass.disabled=true}else $("sunMsg").textContent="Senha incorreta."}
+function unlockMoon(){if($("moonPass").value==="lua 2"){current.moon=true;moonMsg.textContent="Respiração da Lua liberada.";moonPass.disabled=true}else $("moonMsg").textContent="Senha incorreta."}
+function deleteCurrentChar(){
+ if(!current)return;
+ if(!confirm(`Excluir a ficha "${current.name}"? Esta ação não pode ser desfeita.`))return;
+ const id=current.id;
+ chars=chars.filter(c=>c.id!==id);
+ localStorage.setItem("chars",JSON.stringify(chars));
+ Object.keys(localStorage).filter(k=>k.startsWith("camp_")).forEach(k=>{
+   try{let c=JSON.parse(localStorage[k]);c.chars=(c.chars||[]).filter(x=>x!==id);localStorage.setItem(k,JSON.stringify(c))}catch(e){}
+ });
+ current=null;
+ go("chars");
+}
+function setupDice(){$("da").innerHTML=ATTR.map(a=>`<option>${a}</option>`).join("");$("ds").innerHTML=SK.map(s=>`<option>${s}</option>`).join("");renderLog()}
+function attrBonus(v){return Math.max(0,Number(v||0)-4)}
+function attributeRoll(){let c=current||chars[0];if(!c)return alert("Crie uma ficha primeiro.");let a=$("da").value,v=Number(c.attrs?.[a]||0),d=Math.floor(Math.random()*20)+1,b=(a==="Força"||a==="Destreza"||a==="Inteligência")?attrBonus(v):0,t=d+b;$("ar").textContent=t;log(`Atributo ${a}: d20(${d}) + bônus(${b}) = ${t}`)}
+function skillRoll(){let c=current||chars[0];if(!c)return alert("Crie uma ficha primeiro.");let s=$("ds").value,v=Number(c.skills?.[s]||0),d=Math.floor(Math.random()*20)+1,b=v+2,t=d+b;$("sr").textContent=t;log(`Perícia ${s}: d20(${d}) + perícia(${v}) + treinamento(+2) = ${t}`)}
+function damageRoll(){let n=Math.max(1,Number($("dn").value)||1),a=[],t=0;for(let i=0;i<n;i++){let d=Math.floor(Math.random()*6)+1;a.push(d);t+=d}$("dr").textContent=t;log(`Dano: ${a.join(" + ")} = ${t}`)}
+function log(t){let a=JSON.parse(localStorage.getItem("rollLog")||"[]");a.unshift(new Date().toLocaleTimeString()+" — "+t);localStorage.setItem("rollLog",JSON.stringify(a));renderLog()}
+function renderLog(){let a=JSON.parse(localStorage.getItem("rollLog")||"[]");$("rollLog").innerHTML=a.map(x=>`<div>${x}</div>`).join("")}
+setupDice();
+</script>
+<script>if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});</script>
+<script>
+/* ===== A CAÇADA V7 — CAMPANHAS ONLINE ===== */
+let sb=null, onlineReady=false, sessionUser=null, readOnly=false;
+const cfg=window.ACACADA_CONFIG||{};
+function onlineConfigured(){return cfg.supabaseUrl && cfg.supabaseKey && !cfg.supabaseUrl.includes('COLE_AQUI') && !cfg.supabaseKey.includes('COLE_AQUI')}
+async function initOnline(){
+  const st=document.getElementById('onlineStatus');
+  if(!onlineConfigured()){onlineReady=false;if(st)st.innerHTML='<b>Modo local:</b> o banco online ainda não foi configurado. As fichas locais continuam funcionando.';return}
+  try{
+    sb=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    let r=await sb.auth.getSession();
+    if(!r.data.session){r=await sb.auth.signInAnonymously()}
+    if(r.error)throw r.error;
+    sessionUser=r.data.user; onlineReady=true;
+    if(st)st.innerHTML='<b>☁ Banco online conectado.</b> Campanhas e fichas da sala podem ser compartilhadas entre celulares.';
+    const m=location.hash.match(/camp=([A-Z0-9-]+)/i); if(m) await openOnlineCampaign(m[1]);
+  }catch(e){console.error(e);onlineReady=false;if(st)st.innerHTML='<b>Erro no banco online.</b> Verifique config.js e se o login anônimo está ativado no Supabase.'}
+}
+function v7Camps(){return JSON.parse(localStorage.getItem('onlineCamps')||'[]')}
+function rememberCamp(c){let a=v7Camps().filter(x=>x.code!==c.code);a.unshift(c);localStorage.setItem('onlineCamps',JSON.stringify(a.slice(0,30)))}
+async function newCampaign(){
+ if(!onlineReady){alert('O banco online ainda não está configurado. Configure o Supabase no arquivo config.js.');return}
+ const name=prompt('Nome da campanha:','A Caçada — Nova Campanha'); if(name===null)return;
+ const {data,error}=await sb.rpc('create_campaign',{p_name:name});
+ if(error){console.error(error);return alert('Não foi possível criar a campanha: '+error.message)}
+ rememberCamp(data);await openOnlineCampaign(data.code);alert('Campanha criada! Código: '+data.code+'\nAgora use “Copiar link da sala” para mandar aos jogadores.');
+}
+async function enterCampaign(){
+ if(!onlineReady){alert('O banco online ainda não está configurado.');return}
+ let raw=campInput.value.trim();let code=raw.includes('#camp=')?raw.split('#camp=')[1]:raw.split('/').pop();code=decodeURIComponent(code).replace(/[^A-Z0-9-]/gi,'').toUpperCase();
+ if(!code)return alert('Digite o código ou cole o link da campanha.');
+ const player=prompt('Seu nome de jogador:','Jogador');if(player===null)return;
+ const {data,error}=await sb.rpc('join_campaign',{p_code:code,p_player_name:player});
+ if(error){console.error(error);return alert(error.message.includes('CAMPAIGN_NOT_FOUND')?'Campanha não encontrada.':('Não foi possível entrar: '+error.message))}
+ rememberCamp(data);await openOnlineCampaign(data.code);
+}
+async function openOnlineCampaign(code){
+ if(!onlineReady)return;
+ const {data,error}=await sb.rpc('get_campaign',{p_code:code});
+ if(error){console.error(error);return alert('Não foi possível abrir a campanha: '+error.message)}
+ camp=data;rememberCamp(data);campTitle.textContent=data.name;campCode.textContent=data.code;location.hash='camp='+data.code;go('lobby');await syncCampaign();
+ if(window._campTimer)clearInterval(window._campTimer);window._campTimer=setInterval(syncCampaign,4000);
+}
+async function syncCampaign(){
+ if(!onlineReady||!camp)return;
+ const {data,error}=await sb.rpc('list_campaign_characters',{p_code:camp.code});
+ if(error){console.error(error);return}
+ const remotes=data||[];const byOnline=new Map(chars.filter(c=>c._onlineId).map(c=>[c._onlineId,c]));
+ for(const r of remotes){
+   let c=byOnline.get(r.id);
+   if(c){Object.assign(c,r.data,{_onlineId:r.id,_ownerId:r.owner_id,_campaignCode:camp.code});}
+   else{c={...r.data,_onlineId:r.id,_ownerId:r.owner_id,_campaignCode:camp.code,readOnly:r.owner_id!==sessionUser.id};chars.push(c)}
+ }
+ // Do not delete local-only characters. Save cache.
+ localStorage.setItem('chars',JSON.stringify(chars));renderCampChars();renderChars();
+ if(current&&current._onlineId){const fresh=chars.find(x=>x._onlineId===current._onlineId);if(fresh&&document.getElementById('sheet').classList.contains('active')){current=fresh;fillSheet()}}
+}
+function renderCamps(){
+ const b=document.getElementById('campList'),a=v7Camps();
+ b.innerHTML=a.length?a.map(c=>`<div class="card"><b>${escapeHtml(c.name)}</b><div class="small">Código: ${c.code}</div><button class="btn" onclick="openOnlineCampaign('${c.code}')">Abrir</button></div>`).join(''):'<p class="small">Nenhuma campanha online neste aparelho.</p>';
+}
+function renderCampChars(){
+ const arr=chars.filter(c=>c._campaignCode===camp?.code&&c._onlineId);
+ campChars.innerHTML=arr.length?arr.map(c=>`<div class="char" onclick="openRemoteChar('${c._onlineId}')"><img src="${c.img||''}"><b>${escapeHtml(c.name||'Sem nome')}</b><div class="small">${escapeHtml(c.race||'')}</div>${c._ownerId===sessionUser?.id?'<div class="small">Sua ficha</div>':'<div class="small">Outro jogador</div>'}</div>`).join(''):'<p class="small">Nenhum personagem nesta campanha ainda.</p>';
+}
+function escapeHtml(x){return String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function openRemoteChar(id){current=chars.find(c=>c._onlineId===id);if(!current)return;readOnly=current._ownerId!==sessionUser?.id;fillSheet();go('sheet');applyReadOnly()}
+function applyReadOnly(){document.querySelectorAll('#sheet input,#sheet select,#sheet textarea,#sheet button').forEach(el=>{if(el.id==='img'||el.textContent.includes('← Voltar'))return;el.disabled=!!readOnly});const s=document.querySelector('#sheet .card:last-child');if(s)s.style.display=readOnly?'none':''}
+async function createCharFromCamp(){
+ if(!camp||!onlineReady)return;
+ let c={id:rid(),name:'Novo personagem',gender:'Homem',path:'Mestre do Ar',race:'Humano',story:'',affType:'Ar',aff:0,breath:'',blood:'',attrs:Object.fromEntries(ATTR.map(a=>[a,5])),skills:Object.fromEntries(SK.map(s=>[s,0])),pv:25,pe:15,img:'',sun:false,moon:false};
+ chars.push(c);current=c;c._campaignCode=camp.code;localStorage.setItem('chars',JSON.stringify(chars));openChar(c.id);await saveChar(false);await syncCampaign();
+}
+async function saveChar(show=true){
+ if(!current)return;
+ if(readOnly)return alert('Você só pode editar a sua própria ficha.');
+ current.name=$("name").value;current.gender=$("gender").value;current.path=$("path").value;current.race=$("race").value;current.story=$("story").value;current.affType=$("affType").value;current.aff=Number($("aff").value||0);current.pv=Number($("pv").value||0);current.pe=Number($("pe").value||0);
+ ATTR.forEach(a=>{const el=document.querySelector(`[data-a="${a}"]`);if(el)current.attrs[a]=+el.value});SK.forEach(s=>{const el=document.querySelector(`[data-s="${s}"]`);if(el)current.skills[s]=+el.value});
+ localStorage.setItem('chars',JSON.stringify(chars));
+ if(onlineReady&&current._campaignCode){
+   const payload={...current};delete payload._onlineId;delete payload._ownerId;delete payload._campaignCode;delete payload.readOnly;
+   const {data,error}=await sb.rpc('save_character',{p_code:current._campaignCode,p_character_id:current._onlineId||null,p_data:payload});
+   if(error){console.error(error);return alert('Ficha salva localmente, mas houve erro no banco: '+error.message)}
+   if(data?.id)current._onlineId=data.id;current._ownerId=sessionUser.id;localStorage.setItem('chars',JSON.stringify(chars));
+ }
+ if(show)alert('Ficha salva!');renderCampChars();
+}
+async function deleteCurrentChar(){
+ if(!current)return;
+ if(!confirm(`Excluir a ficha "${current.name}"?`))return;
+ if(readOnly)return alert('Você não pode excluir a ficha de outro jogador.');
+ if(onlineReady&&current._campaignCode&&current._onlineId){const {error}=await sb.rpc('delete_character',{p_code:current._campaignCode,p_character_id:current._onlineId});if(error)return alert('Não foi possível excluir: '+error.message)}
+ const id=current.id;const oid=current._onlineId;chars=chars.filter(c=>c!==current);localStorage.setItem('chars',JSON.stringify(chars));current=null;readOnly=false;go('lobby');await syncCampaign();
+}
+function copyInvite(){if(!camp)return;const link=location.origin+location.pathname+'#camp='+camp.code;navigator.clipboard?.writeText(link);alert('Link da campanha copiado:\n'+link)}
+// Wrap navigation to render online campaign list.
+const _go=go;go=function(id){_go(id);if(id==='campaigns')renderCamps();if(id==='lobby'&&camp)renderCampChars();if(id==='sheet')applyReadOnly()}
+initOnline();
+</script>
+<script>
+/* V38 corrections */
+const SPECIAL_BREATHS={
+  Sol:{name:'Respiração do Sol',attribute:'Força',abilities:[
+    ['Sol 1','2d6 → maior',0,'Role 2d6 e use o maior resultado.'],
+    ['Sol 2','3d6 → segundo maior + menor',0,'Role 3d6; some o segundo maior com o menor.'],
+    ['Sol 3','3d6 → maior + segundo maior',0,'Role 3d6; some o maior com o segundo maior.'],
+    ['Sol 4','3d6 → soma',0,'Role 3d6 e some os três resultados.'],
+    ['Sol 5','2d6 + Força',0,'Role 2d6, some os dois dados e adicione o total de Força.']
+  ]},
+  Lua:{name:'Respiração da Lua',attribute:'Destreza',abilities:[
+    ['Lua 1','2d6 → maior',0,'Role 2d6 e use o maior resultado.'],
+    ['Lua 2','3d6 → segundo maior + menor',0,'Role 3d6; some o segundo maior com o menor.'],
+    ['Lua 3','3d6 → maior + segundo maior',0,'Role 3d6; some o maior com o segundo maior.'],
+    ['Lua 4','3d6 → soma',0,'Role 3d6 e some os três resultados.'],
+    ['Lua 5','2d6 + Destreza',0,'Role 2d6, some os dois dados e adicione o total de Destreza.']
+  ]}
+};
+const DERIVATIONS_FIX={Água:['Flor','Inseto','Serpente'],Chamas:['Amor'],Trovão:['Som'],Vento:['Névoa','Fera'],Pedra:[]};
+const BREATH_ASPECTS_FIX={Pedra:['Força'],Vento:['Força'],Fera:['Instinto'],Névoa:['Destreza'],Trovão:['Destreza'],Relâmpago:['Destreza'],Som:['Destreza','Força'],Chamas:['Força'],Amor:['Inteligência'],Água:['Destreza'],Flor:['Destreza'],Serpente:['Destreza'],Inseto:['Instinto']};
+function dice(n){return Array.from({length:n},()=>Math.floor(Math.random()*6)+1)}
+function specialRoll(kind,i,c){const a=dice(i===0?2:i===1?3:i===2?3:i===3?3:2);let sorted=[...a].sort((x,y)=>y-x),total=i===0?sorted[0]:i===1?sorted[1]+sorted[2]:i===2?sorted[0]+sorted[1]:i===3?a.reduce((s,x)=>s+x,0):a.reduce((s,x)=>s+x,0)+Number(c?.attrs?.[SPECIAL_BREATHS[kind].attribute]||0);return {a,total}}
+function normalAbilityRoll(c,i){const a=dice(i===0?2:i===1?2:i===2?2:i===3?3:4);let total=i===0?Math.min(...a):i===1?Math.max(...a):a.reduce((s,x)=>s+x,0);if(i===4){const b=c.breath||'';let bonus=0;if(b==='Som'){bonus=(Number(c.attrs?.Destreza||0)+Number(c.attrs?.Força||0))/2}else{const at=BREATH_ASPECTS_FIX[b]?.[0];if(at)bonus=Number(c.attrs?.[at]||0)}total+=bonus;return {a,total,bonus}}return {a,total,bonus:0}}
+function getRollCharacter(){return current||chars[0]}
+function renderDiceAdvanced(){
+ const d=document.getElementById('dice'); if(!d)return;
+ let old=document.getElementById('diceAdvanced'); if(!old){old=document.createElement('div');old.id='diceAdvanced';d.appendChild(old)}
+ const available=camp?chars.filter(c=>c._campaignCode===camp.code&&c._onlineId):chars;
+ const list=available.length?available:chars;
+ old.innerHTML=`<div class="card" style="margin-top:15px"><h2>Girar — personagem</h2><select id="diceChar" style="width:100%">${list.map(c=>`<option value="${c.id}" ${getRollCharacter()?.id===c.id?'selected':''}>${escapeHtml(c.name||'Sem nome')}</option>`).join('')}</select><label style="margin-top:10px">CA do alvo</label><input id="diceCA" type="number" value="10"><div id="diceCharInfo" class="small" style="margin-top:10px"></div></div><div id="diceAbilities" class="card" style="margin-top:15px"><h2>Técnicas</h2></div><div class="card" style="margin-top:15px"><h2>Ataque básico</h2><button class="btn gold" onclick="basicKatanaRoll()">Atacar com Katana</button><div id="basicResult" class="result">—</div></div>`;
+ document.getElementById('diceChar').onchange=()=>{const c=chars.find(x=>x.id===document.getElementById('diceChar').value);if(c){current=c;renderDiceAbilitiesAdvanced()}};
+ renderDiceAbilitiesAdvanced();
+}
+function specialUnlocked(c){return c?.sun||c?.moon}
+function getDiceAbilitiesAdvanced(c){
+ if(!c)return {kind:'',list:[],special:null};
+ if(c.sun)return {kind:'Respiração do Sol',list:SPECIAL_BREATHS.Sol.abilities,special:'Sol'};
+ if(c.moon)return {kind:'Respiração da Lua',list:SPECIAL_BREATHS.Lua.abilities,special:'Lua'};
+ if(c.path==='Sanguíneo'&&c.blood){const b=BLOOD.find(x=>x[0]===c.blood);return {kind:'Técnica de Sangue',list:b?b[1]:[],special:null}}
+ if(c.breath){const b=BREATHS.find(x=>x[0]===c.breath);return {kind:'Respiração '+c.breath,list:b?b[3]:[],special:null}}
+ return {kind:'',list:[],special:null};
+}
+function renderDiceAbilitiesAdvanced(){
+ const box=document.getElementById('diceAbilities'),info=document.getElementById('diceCharInfo');if(!box)return;
+ const id=document.getElementById('diceChar')?.value;const c=chars.find(x=>x.id===id)||getRollCharacter();if(!c)return;
+ current=c;
+ const x=getDiceAbilitiesAdvanced(c);info.innerHTML=`<b>${escapeHtml(c.name||'Sem nome')}</b> • ${escapeHtml(x.kind||'Sem técnica')} • PV ${Number(c.pv||0)} • PE ${Number(c.pe||0)}`;
+ box.innerHTML='<h2>Técnicas</h2>'+(x.list.length?x.list.map((a,i)=>`<div class="style"><h4>${i+1}. ${escapeHtml(a[0])}</h4><div class="small">${escapeHtml(a[1]||'')}</div><p>${escapeHtml(a[3]||'')}</p><button class="btn gold" onclick="rollAdvancedAbility(${i})">Girar técnica</button><div id="abilityResult${i}" class="result">—</div></div>`).join(''):'<div class="small">Nenhuma técnica disponível para esta ficha.</div>');
+}
+function rollAdvancedAbility(i){
+ const id=document.getElementById('diceChar')?.value,c=chars.find(x=>x.id===id)||current;if(!c)return;
+ const ca=Number(document.getElementById('diceCA')?.value||0),x=getDiceAbilitiesAdvanced(c),special=x.special;let r=special?specialRoll(special,i,c):normalAbilityRoll(c,i);const d20=Math.floor(Math.random()*20)+1,hit=d20>ca;
+ let text=`d20: ${d20} vs CA ${ca} → ${hit?'ACERTO':'ERROU'} | dados: ${r.a.join(' + ')}${r.bonus?` + ${r.bonus} ${special?'':BREATH_ASPECTS_FIX[c.breath]?.[0]||''}`:''} = ${r.total}`;
+ const el=document.getElementById('abilityResult'+i);if(el)el.textContent=text;log(`${c.name}: ${x.list[i]?.[0]||'Técnica'} — ${text}`);
+}
+function basicKatanaRoll(){const c=getRollCharacter();if(!c)return;const ca=Number(document.getElementById('diceCA')?.value||0),d20=Math.floor(Math.random()*20)+1,hit=d20>ca,dmg=Math.floor(Math.random()*6)+1,text=`d20: ${d20} vs CA ${ca} → ${hit?'ACERTO':'ERROU'} | dano: d6(${dmg})`;document.getElementById('basicResult').textContent=text;log(`${c.name}: Ataque básico — ${text}`)}
+function renderSpecialBreaths(){const e=document.getElementById('specialBreaths');if(!e||!current)return;e.style.display=current.path==='Mestre do Ar'?'block':'none';e.innerHTML=`<h2>Respirações especiais</h2><div class="style"><h4>☀ Respiração do Sol</h4><p>Digite <b>SOL</b> para equipar automaticamente.</p><input id="sunPass" placeholder="Senha"><button class="btn" onclick="unlockSun()">Desbloquear</button><div id="sunMsg" class="small"></div></div><div class="style"><h4>☾ Respiração da Lua</h4><p>Digite <b>LUA</b> para equipar automaticamente.</p><input id="moonPass" placeholder="Senha"><button class="btn" onclick="unlockMoon()">Desbloquear</button><div id="moonMsg" class="small"></div></div>`}
+function unlockSun(){if(!current)return;if(String(document.getElementById('sunPass')?.value||'').trim()==='SOL'){current.sun=true;current.moon=false;current.breath='';current.aff=0;document.getElementById('sunMsg').textContent='Respiração do Sol equipada.';saveChar(false);renderStyles();renderSpecialBreaths();renderDiceAdvanced()}else document.getElementById('sunMsg').textContent='Senha incorreta.'}
+function unlockMoon(){if(!current)return;if(String(document.getElementById('moonPass')?.value||'').trim()==='LUA'){current.moon=true;current.sun=false;current.breath='';current.aff=0;document.getElementById('moonMsg').textContent='Respiração da Lua equipada.';saveChar(false);renderStyles();renderSpecialBreaths();renderDiceAdvanced()}else document.getElementById('moonMsg').textContent='Senha incorreta.'}
+function fillSheet(){
+ if(!current)return;
+ ['name','gender','path','race','story','affType','aff','pv','pe'].forEach(k=>{const e=document.getElementById(k);if(e&&current[k]!==undefined)e.value=current[k]});
+ const inv=document.getElementById('inventory');if(inv)inv.value=current.inventory||'';
+ const pv=document.getElementById('pv');const pe=document.getElementById('pe');if(pv&&current.pv==null)pv.value=10+Number(current.attrs?.Vigor||5)*5;if(pe&&current.pe==null)pe.value=7+Number(current.attrs?.Vigor||5)*3;
+ if(typeof updateChoices==='function')updateChoices();if(typeof updateAffinity==='function')updateAffinity();if(typeof renderPassives==='function')renderPassives();if(typeof renderStyles==='function')renderStyles();if(typeof renderSpecialBreaths==='function')renderSpecialBreaths();if(typeof recalc==='function')recalc();
+}
+const _oldSave=saveChar;saveChar=async function(show=true){if(!current)return;if(readOnly)return alert('Você só pode editar a sua própria ficha.');const inv=document.getElementById('inventory');if(inv)current.inventory=inv.value;return _oldSave(show)};
+const _oldCreate=createCharFromCamp;createCharFromCamp=async function(){return _oldCreate()};
+function renderPassives(){let p=`<div class="passive"><b>Gênero: ${current.gender}</b><br>${g[current.gender]||''}</div>`;if(current.path==='Mestre do Ar')p+=`<div class="passive"><b>Mestre do Ar</b><br>Humano obrigatório. Escolha uma Respiração principal e evolua pela Afinidade.</div>`;if(current.race==='Humano'||current.race==='Oni Amigável')p+=`<div class="passive"><b>Recuperação a cada 2 turnos</b><br>Após completar 2 turnos, pode recuperar +1 PV e +1 PE.</div>`;if(current.race==='Devorador de Oni')p+=`<div class="passive"><b>Forma de Oni</b><br>Enquanto estiver na forma de Oni, recupera +2 PV por turno.</div>`;document.getElementById('passives').innerHTML=p}
+function ensureTurnUI(){const box=document.getElementById('passives');if(!box||document.getElementById('turnControls'))return;const d=document.createElement('div');d.id='turnControls';d.className='notice';d.style.marginTop='10px';d.innerHTML=`<b>Turnos</b><div id="turnText" class="small"></div><button class="btn" onclick="registerTurn()">Registrar 1 turno</button><button id="recover2" class="btn gold" onclick="recoverTwoTurns()" style="display:none">Recuperar +1 PV e +1 PE</button><div id="oniControls" style="margin-top:8px"></div>`;box.appendChild(d)}
+function registerTurn(){if(!current)return;current.humanTurns=Number(current.humanTurns||0)+1;if(current.race==='Devorador de Oni'&&current.oniFormActive){current.pv=Number(current.pv||0)+2;current.oniTurns=Number(current.oniTurns||0)+1}updateTurnUI();saveChar(false)}
+function recoverTwoTurns(){if(!current||Number(current.humanTurns||0)<2)return;current.humanTurns=0;current.pv=Number(current.pv||0)+1;current.pe=Number(current.pe||0)+1;document.getElementById('pv').value=current.pv;document.getElementById('pe').value=current.pe;updateTurnUI();saveChar(false)}
+function toggleOniForm(){if(!current)return;current.oniFormActive=!current.oniFormActive;current.oniTurns=0;updateTurnUI();saveChar(false)}
+function updateTurnUI(){ensureTurnUI();const t=document.getElementById('turnText');if(t)t.textContent=`Turnos acumulados: ${Number(current.humanTurns||0)}${current.race==='Devorador de Oni'?` • Forma de Oni: ${current.oniFormActive?'ATIVA':'inativa'} • turnos na forma: ${Number(current.oniTurns||0)}`:''}`;const r=document.getElementById('recover2');if(r)r.style.display=(current.race==='Humano'||current.race==='Oni Amigável')&&Number(current.humanTurns||0)>=2?'inline-block':'none';const o=document.getElementById('oniControls');if(o)o.innerHTML=current.race==='Devorador de Oni'?`<button class="btn" onclick="toggleOniForm()">${current.oniFormActive?'Desativar':'Ativar'} forma de Oni</button>`:''}
+function addInventory(){const c=document.querySelector('#story');if(!c||document.getElementById('inventory'))return;const card=document.createElement('div');card.className='card';card.style.marginTop='15px';card.innerHTML='<h2>Inventário</h2><textarea id="inventory" placeholder="Itens, armas, objetos..."></textarea>';c.closest('.grid').after(card)}
+const _oldRenderDice=setupDice;setupDice=function(){_oldRenderDice();renderDiceAdvanced()};
+const _oldFill=window.fillSheet;window.fillSheet=function(){_oldFill();addInventory();ensureTurnUI();updateTurnUI();renderSpecialBreaths()};
+window.addEventListener('load',()=>{addInventory();if(current){ensureTurnUI();updateTurnUI();renderSpecialBreaths()}renderDiceAdvanced()});
+
+</script>
+
+<script>
+/* A CAÇADA — CORREÇÃO FINAL DE FICHAS / MODO LOCAL */
+(function(){
+  const originalSave = window.saveChar;
+
+  function freshCharacter(){
+    return {
+      id: rid(),
+      name: 'Novo personagem',
+      gender: 'Homem',
+      path: 'Mestre do Ar',
+      race: 'Humano',
+      story: '',
+      affType: 'Ar',
+      aff: 0,
+      breath: '',
+      blood: '',
+      attrs: Object.fromEntries(ATTR.map(a=>[a,5])),
+      skills: Object.fromEntries(SK.map(s=>[s,0])),
+      pv: 35,
+      pe: 22,
+      img: '',
+      inventory: '',
+      sun: false,
+      moon: false,
+      humanTurns: 0,
+      oniFormActive: false,
+      oniTurns: 0
+    };
+  }
+
+  window.recalc = function(){
+    if(!current) return;
+    const v = Number(document.querySelector('[data-a="Vigor"]')?.value ?? current.attrs?.Vigor ?? 5);
+    const maxPV = 10 + v * 5;
+    const maxPE = 7 + v * 3;
+    const pv = document.getElementById('pv');
+    const pe = document.getElementById('pe');
+    if(pv && (pv.value==='' || pv.dataset.auto==='1')) { pv.value=maxPV; pv.dataset.auto='1'; }
+    if(pe && (pe.value==='' || pe.dataset.auto==='1')) { pe.value=maxPE; pe.dataset.auto='1'; }
+    return {maxPV,maxPE};
+  };
+
+  function markResourceManual(el){ if(el) el.dataset.auto='0'; }
+  document.addEventListener('input', e=>{
+    if(e.target && (e.target.id==='pv' || e.target.id==='pe')) markResourceManual(e.target);
+  });
+
+  window.renderPassives = function(){
+    const box=document.getElementById('passives');
+    if(!box || !current) return;
+    let html=`<div class="passive"><b>Gênero: ${escapeHtml(current.gender||'')}</b></div>`;
+    if(current.path==='Mestre do Ar'){
+      html+=`<div class="passive"><b>Mestre do Ar</b><br>Humano obrigatório. Escolha uma Respiração e evolua pela Afinidade.</div>`;
+    }
+    if(current.race==='Humano' || current.race==='Oni Amigável'){
+      html+=`<div class="passive"><b>Recuperação</b><br>A cada 2 turnos completos: +1 PV e +1 PE.</div>`;
+    }
+    if(current.race==='Devorador de Oni'){
+      html+=`<div class="passive"><b>Forma de Oni</b><br>Enquanto ativa: +2 PV por turno.</div>`;
+    }
+    box.innerHTML=html;
+  };
+
+  window.fillSheet = function(){
+    if(!current) return;
+    const set=(id,val)=>{const e=document.getElementById(id);if(e)e.value=val??''};
+    set('name',current.name); set('gender',current.gender||'Homem'); set('path',current.path||'Mestre do Ar');
+    set('story',current.story); set('affType',current.affType||'Ar'); set('aff',Number(current.aff||0));
+    set('pv',Number(current.pv ?? 35)); set('pe',Number(current.pe ?? 22));
+    const avatar=document.getElementById('avatar'); if(avatar) avatar.src=current.img||'';
+    const attrs=document.getElementById('attrs');
+    if(attrs) attrs.innerHTML=ATTR.map(a=>`<div class="stat"><span>${a}</span><input data-a="${a}" type="number" min="1" max="7" value="${Number(current.attrs?.[a]??5)}"></div>`).join('');
+    const skills=document.getElementById('skills');
+    if(skills) skills.innerHTML=SK.map(sk=>`<div class="stat"><span>${sk}</span><input data-s="${sk}" type="number" min="0" max="20" value="${Number(current.skills?.[sk]??0)}"></div>`).join('');
+    const pv=document.getElementById('pv'), pe=document.getElementById('pe');
+    if(pv) pv.dataset.auto = current._resourceAuto ? '1':'0';
+    if(pe) pe.dataset.auto = current._resourceAuto ? '1':'0';
+    document.querySelectorAll('[data-a]').forEach(e=>e.addEventListener('input',()=>{ if(e.dataset.a==='Vigor') recalc(); }));
+    const inv=document.getElementById('inventory'); if(inv) inv.value=current.inventory||'';
+    if(typeof updateChoices==='function') updateChoices();
+    if(typeof updateAffinity==='function') updateAffinity();
+    renderPassives();
+    if(typeof renderStyles==='function') renderStyles();
+    if(typeof renderSpecialBreaths==='function') renderSpecialBreaths();
+    if(typeof ensureTurnUI==='function') ensureTurnUI();
+    if(typeof updateTurnUI==='function') updateTurnUI();
+  };
+
+  window.openChar = function(cid){
+    const found=chars.find(c=>c.id===cid);
+    if(!found) return;
+    current=found;
+    readOnly=false;
+    fillSheet();
+    go('sheet');
+    applyReadOnly();
+  };
+
+  window.newChar = function(){
+    const c=freshCharacter();
+    c._resourceAuto=true;
+    chars.push(c);
+    current=c;
+    localStorage.setItem('chars',JSON.stringify(chars));
+    renderChars();
+    openChar(c.id);
+  };
+
+  window.createCharFromCamp = async function(){
+    if(!camp){
+      alert('Abra uma campanha primeiro.');
+      return;
+    }
+    const c=freshCharacter();
+    c._resourceAuto=true;
+    c._campaignCode=camp.code || camp.id;
+    chars.push(c);
+    current=c;
+    if(!Array.isArray(camp.chars)) camp.chars=[];
+    if(!camp.chars.includes(c.id)) camp.chars.push(c.id);
+    localStorage.setItem('chars',JSON.stringify(chars));
+    if(camp.id) localStorage.setItem('camp_'+camp.id,JSON.stringify(camp));
+    if(camp.code) localStorage.setItem('camp_'+camp.code,JSON.stringify(camp));
+    renderCampChars();
+    openChar(c.id);
+    if(window.onlineReady && typeof originalSave==='function') {
+      try { await originalSave(false); } catch(e){ console.error(e); }
+    }
+  };
+
+  window.renderCampChars = function(){
+    const box=document.getElementById('campChars'); if(!box) return;
+    const code=camp?.code || camp?.id;
+    const list=chars.filter(c=>c._campaignCode===code || (camp?.chars||[]).includes(c.id));
+    box.innerHTML=list.length ? list.map(c=>`<div class="char" onclick="openChar('${c.id}')"><img src="${c.img||''}" alt=""><b>${escapeHtml(c.name||'Sem nome')}</b><div class="small">${escapeHtml(c.race||'')}</div><div class="small">${c._ownerId && window.sessionUser && c._ownerId!==sessionUser.id?'Outro jogador':'Sua ficha'}</div></div>`).join('') : `<p class="small">Nenhum personagem ainda.</p>`;
+  };
+
+  window.saveChar = async function(show=true){
+    if(!current || readOnly) {
+      if(readOnly) alert('Você só pode editar a sua própria ficha.');
+      return;
+    }
+    current.name=document.getElementById('name')?.value||'Sem nome';
+    current.gender=document.getElementById('gender')?.value||'Homem';
+    current.path=document.getElementById('path')?.value||'Mestre do Ar';
+    current.race=document.getElementById('race')?.value||'Humano';
+    current.story=document.getElementById('story')?.value||'';
+    current.affType=document.getElementById('affType')?.value||'Ar';
+    current.aff=Number(document.getElementById('aff')?.value||0);
+    current.pv=Number(document.getElementById('pv')?.value||0);
+    current.pe=Number(document.getElementById('pe')?.value||0);
+    current.inventory=document.getElementById('inventory')?.value||'';
+    ATTR.forEach(a=>{const e=document.querySelector(`[data-a="${a}"]`);if(e)current.attrs[a]=Number(e.value)});
+    SK.forEach(sk=>{const e=document.querySelector(`[data-s="${sk}"]`);if(e)current.skills[sk]=Number(e.value)});
+    current._resourceAuto=false;
+    localStorage.setItem('chars',JSON.stringify(chars));
+    if(show) alert('Ficha salva!');
+    renderChars(); renderCampChars();
+    if(window.onlineReady && current._campaignCode && typeof sb!=='undefined' && sb){
+      try {
+        const payload={...current}; delete payload._onlineId; delete payload._ownerId; delete payload._campaignCode; delete payload.readOnly;
+        const {data,error}=await sb.rpc('save_character',{p_code:current._campaignCode,p_character_id:current._onlineId||null,p_data:payload});
+        if(error) throw error;
+        if(data?.id) current._onlineId=data.id;
+        if(typeof sessionUser!=='undefined' && sessionUser) current._ownerId=sessionUser.id;
+        localStorage.setItem('chars',JSON.stringify(chars));
+      } catch(e){ console.error(e); }
+    }
+  };
+
+  window.deleteCurrentChar = async function(){
+    if(!current) return;
+    if(readOnly){ alert('Você não pode excluir a ficha de outro jogador.'); return; }
+    if(!confirm(`Excluir a ficha "${current.name}"? Esta ação não pode ser desfeita.`)) return;
+    const id=current.id;
+    chars=chars.filter(c=>c.id!==id);
+    if(camp?.chars) camp.chars=camp.chars.filter(x=>x!==id);
+    localStorage.setItem('chars',JSON.stringify(chars));
+    if(camp?.id) localStorage.setItem('camp_'+camp.id,JSON.stringify(camp));
+    current=null;
+    readOnly=false;
+    go(camp?'lobby':'chars');
+    renderChars(); renderCampChars();
+  };
+
+  /* Garante que os recursos iniciais sigam as regras aprovadas. */
+  window.normalizeCharacterResources = function(c){
+    if(!c) return;
+    const v=Number(c.attrs?.Vigor||5);
+    if(c.pv==null || (c.pv===25 && c.pe===15)) { c.pv=10+v*5; c.pe=7+v*3; c._resourceAuto=true; }
+  };
+  chars.forEach(normalizeCharacterResources);
+  localStorage.setItem('chars',JSON.stringify(chars));
+})();
+</script>
+
+<script>
+/* Correção adicional: rolagens especiais e técnicas */
+(function(){
+  window.specialRoll = function(kind,i,c){
+    const count = i===0 ? 2 : i===1 ? 3 : i===2 ? 3 : i===3 ? 3 : 2;
+    const a = dice(count);
+    const sorted=[...a].sort((x,y)=>y-x);
+    let total, bonus=0, label='';
+    if(i===0) total=sorted[0];
+    else if(i===1) total=sorted[1]+sorted[2];
+    else if(i===2) total=sorted[0]+sorted[1];
+    else if(i===3) total=a.reduce((s,x)=>s+x,0);
+    else {
+      total=a.reduce((s,x)=>s+x,0);
+      const attr=SPECIAL_BREATHS[kind].attribute;
+      bonus=Number(c?.attrs?.[attr]||0);
+      label=attr;
+      total+=bonus;
+    }
+    return {a,total,bonus,label};
+  };
+
+  window.normalAbilityRoll = function(c,i){
+    const count=i===0?2:i===1?2:i===2?2:i===3?3:4;
+    const a=dice(count);
+    let total,bonus=0,label='';
+    if(i===0) total=Math.min(...a);
+    else if(i===1) total=Math.max(...a);
+    else if(i===2) total=a.reduce((s,x)=>s+x,0);
+    else if(i===3) total=a.reduce((s,x)=>s+x,0);
+    else {
+      total=a.reduce((s,x)=>s+x,0);
+      const b=c.breath||'';
+      if(b==='Som'){
+        const dex=Number(c.attrs?.Destreza||0), str=Number(c.attrs?.Força||0);
+        bonus=(dex+str)/2; label='(Destreza + Força) ÷ 2';
+      } else {
+        const attr=BREATH_ASPECTS_FIX[b]?.[0];
+        if(attr){bonus=Number(c.attrs?.[attr]||0);label=attr;}
+      }
+      total+=bonus;
+    }
+    return {a,total,bonus,label};
+  };
+
+  window.rollAdvancedAbility = function(i){
+    const id=document.getElementById('diceChar')?.value;
+    const c=chars.find(x=>x.id===id)||current;
+    if(!c) return;
+    const ca=Math.max(0,Number(document.getElementById('diceCA')?.value||0));
+    const x=getDiceAbilitiesAdvanced(c);
+    const r=x.special ? specialRoll(x.special,i,c) : normalAbilityRoll(c,i);
+    const d20=Math.floor(Math.random()*20)+1;
+    const hit=d20>ca;
+    const bonusText=r.bonus?` + ${r.bonus}${r.label?' '+r.label:''}`:'';
+    const text=`d20: ${d20} vs CA ${ca} → ${hit?'ACERTO':'ERROU'} | dados: ${r.a.join(' + ')}${bonusText} = ${r.total}`;
+    const el=document.getElementById('abilityResult'+i);
+    if(el) el.textContent=text;
+    log(`${c.name}: ${x.list[i]?.[0]||'Técnica'} — ${text}`);
+  };
+
+  window.basicKatanaRoll = function(){
+    const c=getRollCharacter(); if(!c) return;
+    const ca=Math.max(0,Number(document.getElementById('diceCA')?.value||0));
+    const hitRoll=Math.floor(Math.random()*20)+1;
+    const hit=hitRoll>ca;
+    const damage=Math.floor(Math.random()*6)+1;
+    const text=`Ataque: d20(${hitRoll}) vs CA ${ca} → ${hit?'ACERTO':'ERROU'} | dano: d6(${damage})`;
+    const el=document.getElementById('basicResult'); if(el) el.textContent=text;
+    log(`${c.name}: Ataque básico — ${text}`);
+  };
+})();
+</script>
+</body></html>
