@@ -1,0 +1,11 @@
+{
+  "name": "A Caçada — RPG",
+  "short_name": "A Caçada",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#08090c",
+  "theme_color": "#08090c",
+  "icons": []
+}
