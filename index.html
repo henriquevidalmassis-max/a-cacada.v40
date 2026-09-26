@@ -195,105 +195,178 @@ setupDice();
 </script>
 <script>if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});</script>
 <script>
-/* ===== A CAÇADA V7 — CAMPANHAS ONLINE ===== */
-let sb=null, onlineReady=false, sessionUser=null, readOnly=false;
+/* ===== A CAÇADA V41 — MULTIPLAYER WEBSOCKET ===== */
+let sb=null;
+let onlineReady=false;
+let sessionUser=null;
+let readOnly=false;
+let ws=null;
+let wsOpenPromise=null;
+let wsSeq=0;
+const wsPending=new Map();
 const cfg=window.ACACADA_CONFIG||{};
-function onlineConfigured(){return cfg.supabaseUrl && cfg.supabaseKey && !cfg.supabaseUrl.includes('COLE_AQUI') && !cfg.supabaseKey.includes('COLE_AQUI')}
-async function initOnline(){
-  const st=document.getElementById('onlineStatus');
-  if(!onlineConfigured()){onlineReady=false;if(st)st.innerHTML='<b>Modo local:</b> o banco online ainda não foi configurado. As fichas locais continuam funcionando.';return}
-  try{
-    sb=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-    let r=await sb.auth.getSession();
-    if(!r.data.session){r=await sb.auth.signInAnonymously()}
-    if(r.error)throw r.error;
-    sessionUser=r.data.user; onlineReady=true;
-    if(st)st.innerHTML='<b>☁ Banco online conectado.</b> Campanhas e fichas da sala podem ser compartilhadas entre celulares.';
-    const m=location.hash.match(/camp=([A-Z0-9-]+)/i); if(m) await openOnlineCampaign(m[1]);
-  }catch(e){console.error(e);onlineReady=false;if(st)st.innerHTML='<b>Erro no banco online.</b> Verifique config.js e se o login anônimo está ativado no Supabase.'}
+
+function onlineConfigured(){
+  return !!(cfg.websocketUrl || cfg.serverUrl);
+}
+function websocketUrl(){
+  if(cfg.websocketUrl) return cfg.websocketUrl;
+  const u=String(cfg.serverUrl||'').replace(/\/$/,'');
+  return u ? u.replace(/^https:/,'wss:').replace(/^http:/,'ws:') : '';
+}
+function wsSend(type,payload={}){
+  return new Promise((resolve,reject)=>{
+    if(!ws || ws.readyState!==WebSocket.OPEN){reject(new Error('SERVER_OFFLINE'));return}
+    const id=String(++wsSeq);
+    wsPending.set(id,{resolve,reject});
+    ws.send(JSON.stringify({type,id,...payload}));
+    setTimeout(()=>{
+      const p=wsPending.get(id);
+      if(p){wsPending.delete(id);p.reject(new Error('TIMEOUT'))}
+    },12000);
+  });
+}
+function handleWsMessage(msg){
+  if(msg.type==='response' && msg.id){
+    const p=wsPending.get(msg.id); if(!p)return;
+    wsPending.delete(msg.id);
+    if(msg.ok===false)p.reject(new Error(msg.error||'SERVER_ERROR'));else p.resolve(msg.data);
+    return;
+  }
+  if(msg.type==='campaign_state'){
+    applyCampaignState(msg.data);
+  }
+}
+function applyCampaignState(data){
+  if(!data)return;
+  camp=data.campaign||data;
+  if(data.player)sessionUser=data.player;
+  if(data.role)sessionUser={...(sessionUser||{}),role:data.role};
+  if(sessionUser)sessionUser.campaignCode=(data.campaign||data).code;
+  if(!camp)return;
+  campTitle.textContent=camp.name||'A Caçada';
+  campCode.textContent=camp.code||'';
+  rememberCamp(camp);
+  const remoteChars=Array.isArray(camp.characters)?camp.characters:[];
+  const byOnline=new Map(chars.filter(c=>c._onlineId).map(c=>[c._onlineId,c]));
+  for(const r of remoteChars){
+    let c=byOnline.get(r.id);
+    if(c) Object.assign(c,r.data,{_onlineId:r.id,_ownerId:r.ownerId,_campaignCode:camp.code});
+    else {c={...r.data,_onlineId:r.id,_ownerId:r.ownerId,_campaignCode:camp.code};chars.push(c)}
+  }
+  const ids=new Set(remoteChars.map(r=>r.id));
+  chars=chars.filter(c=>!c._campaignCode || c._campaignCode!==camp.code || c._onlineId===undefined || ids.has(c._onlineId));
+  localStorage.setItem('chars',JSON.stringify(chars));
+  renderCampChars();renderChars();
+  if(current&&current._onlineId){
+    const fresh=chars.find(x=>x._onlineId===current._onlineId);
+    if(fresh){current=fresh;if(document.getElementById('sheet')?.classList.contains('active')){fillSheet();applyReadOnly()}}
+  }
+}
+function openWebSocket(){
+  if(ws&&ws.readyState===WebSocket.OPEN)return Promise.resolve();
+  if(wsOpenPromise)return wsOpenPromise;
+  const url=websocketUrl();
+  if(!url)return Promise.reject(new Error('SERVER_NOT_CONFIGURED'));
+  wsOpenPromise=new Promise((resolve,reject)=>{
+    try{ws=new WebSocket(url)}catch(e){wsOpenPromise=null;reject(e);return}
+    const timer=setTimeout(()=>{if(ws?.readyState!==WebSocket.OPEN){try{ws?.close()}catch{};wsOpenPromise=null;reject(new Error('SERVER_TIMEOUT'))}},10000);
+    ws.onopen=()=>{clearTimeout(timer);onlineReady=true;wsOpenPromise=null;resolve()};
+    ws.onmessage=e=>{try{handleWsMessage(JSON.parse(e.data))}catch(err){console.error(err)}};
+    ws.onerror=()=>{};
+    ws.onclose=()=>{onlineReady=false;ws=null;wsOpenPromise=null;for(const [id,p] of wsPending){p.reject(new Error('SERVER_DISCONNECTED'));wsPending.delete(id)};const st=document.getElementById('onlineStatus');if(st)st.innerHTML='<b>Servidor desconectado.</b> Tentando reconectar quando necessário.'};
+  });
+  return wsOpenPromise;
 }
 function v7Camps(){return JSON.parse(localStorage.getItem('onlineCamps')||'[]')}
-function rememberCamp(c){let a=v7Camps().filter(x=>x.code!==c.code);a.unshift(c);localStorage.setItem('onlineCamps',JSON.stringify(a.slice(0,30)))}
+function rememberCamp(c){if(!c?.code)return;let a=v7Camps().filter(x=>x.code!==c.code);a.unshift({code:c.code,name:c.name||'A Caçada'});localStorage.setItem('onlineCamps',JSON.stringify(a.slice(0,30)))}
+async function initOnline(){
+  const st=document.getElementById('onlineStatus');
+  if(!onlineConfigured()){onlineReady=false;if(st)st.innerHTML='<b>Modo local.</b> O servidor multiplayer ainda não foi configurado.';return}
+  try{
+    await openWebSocket();
+    if(st)st.innerHTML='<b>Servidor multiplayer conectado.</b> As campanhas podem ser compartilhadas entre celulares.';
+    const m=location.hash.match(/camp=([A-Z0-9-]+)/i);
+    const saved=localStorage.getItem('activeCampaignCode');
+    if(m) await openOnlineCampaign(m[1]); else if(saved) await openOnlineCampaign(saved);
+  }catch(e){console.error(e);onlineReady=false;if(st)st.innerHTML='<b>Servidor multiplayer indisponível.</b> Abra o site novamente quando o Render estiver online.'}
+}
 async function newCampaign(){
- if(!onlineReady){alert('O banco online ainda não está configurado. Configure o Supabase no arquivo config.js.');return}
- const name=prompt('Nome da campanha:','A Caçada — Nova Campanha'); if(name===null)return;
- const {data,error}=await sb.rpc('create_campaign',{p_name:name});
- if(error){console.error(error);return alert('Não foi possível criar a campanha: '+error.message)}
- rememberCamp(data);await openOnlineCampaign(data.code);alert('Campanha criada! Código: '+data.code+'\nAgora use “Copiar link da sala” para mandar aos jogadores.');
+  try{await openWebSocket()}catch(e){return alert('O servidor multiplayer não está disponível agora.')}
+  const name=prompt('Nome da campanha:','A Caçada — Nova Campanha');if(name===null)return;
+  const player=prompt('Seu nome de Mestre:','Mestre');if(player===null)return;
+  try{
+    const data=await wsSend('create_campaign',{name:name.trim()||'A Caçada — Nova Campanha',playerName:player.trim()||'Mestre'});
+    sessionUser=data.player;applyCampaignState(data);localStorage.setItem('activeCampaignCode',data.campaign.code);location.hash='camp='+data.campaign.code;go('lobby');
+    alert('Campanha criada! Código: '+data.campaign.code+'\nAgora use “Copiar link da sala”.');
+  }catch(e){console.error(e);alert('Não foi possível criar a campanha: '+e.message)}
 }
 async function enterCampaign(){
- if(!onlineReady){alert('O banco online ainda não está configurado.');return}
- let raw=campInput.value.trim();let code=raw.includes('#camp=')?raw.split('#camp=')[1]:raw.split('/').pop();code=decodeURIComponent(code).replace(/[^A-Z0-9-]/gi,'').toUpperCase();
- if(!code)return alert('Digite o código ou cole o link da campanha.');
- const player=prompt('Seu nome de jogador:','Jogador');if(player===null)return;
- const {data,error}=await sb.rpc('join_campaign',{p_code:code,p_player_name:player});
- if(error){console.error(error);return alert(error.message.includes('CAMPAIGN_NOT_FOUND')?'Campanha não encontrada.':('Não foi possível entrar: '+error.message))}
- rememberCamp(data);await openOnlineCampaign(data.code);
+  try{await openWebSocket()}catch(e){return alert('O servidor multiplayer não está disponível agora.')}
+  let raw=campInput.value.trim();let code=raw.includes('#camp=')?raw.split('#camp=')[1]:raw.split('/').pop();code=decodeURIComponent(code).replace(/[^A-Z0-9-]/gi,'').toUpperCase();
+  if(!code)return alert('Digite o código ou cole o link da campanha.');
+  const player=prompt('Seu nome de jogador:','Jogador');if(player===null)return;
+  try{
+    const data=await wsSend('join_campaign',{code,playerName:player.trim()||'Jogador'});
+    sessionUser=data.player;applyCampaignState(data);localStorage.setItem('activeCampaignCode',data.campaign.code);location.hash='camp='+data.campaign.code;go('lobby');
+  }catch(e){console.error(e);alert(e.message==='CAMPAIGN_NOT_FOUND'?'Campanha não encontrada.':'Não foi possível entrar: '+e.message)}
 }
 async function openOnlineCampaign(code){
- if(!onlineReady)return;
- const {data,error}=await sb.rpc('get_campaign',{p_code:code});
- if(error){console.error(error);return alert('Não foi possível abrir a campanha: '+error.message)}
- camp=data;rememberCamp(data);campTitle.textContent=data.name;campCode.textContent=data.code;location.hash='camp='+data.code;go('lobby');await syncCampaign();
- if(window._campTimer)clearInterval(window._campTimer);window._campTimer=setInterval(syncCampaign,4000);
+  try{await openWebSocket()}catch(e){return}
+  code=String(code||'').replace(/[^A-Z0-9-]/gi,'').toUpperCase();if(!code)return;
+  try{
+    if(!sessionUser || sessionUser.campaignCode!==code){
+      const player=prompt('Seu nome de jogador:','Jogador');
+      if(player===null)return;
+      const joined=await wsSend('join_campaign',{code,playerName:player.trim()||'Jogador'});
+      sessionUser=joined.player;applyCampaignState(joined);localStorage.setItem('activeCampaignCode',joined.campaign.code);location.hash='camp='+joined.campaign.code;go('lobby');return;
+    }
+    const data=await wsSend('get_campaign',{code});
+    sessionUser=data.player;applyCampaignState(data);localStorage.setItem('activeCampaignCode',data.campaign.code);campTitle.textContent=data.campaign.name;campCode.textContent=data.campaign.code;location.hash='camp='+data.campaign.code;go('lobby');
+  }catch(e){console.error(e);if(e.message==='CAMPAIGN_NOT_FOUND')alert('Campanha não encontrada.');}
 }
 async function syncCampaign(){
- if(!onlineReady||!camp)return;
- const {data,error}=await sb.rpc('list_campaign_characters',{p_code:camp.code});
- if(error){console.error(error);return}
- const remotes=data||[];const byOnline=new Map(chars.filter(c=>c._onlineId).map(c=>[c._onlineId,c]));
- for(const r of remotes){
-   let c=byOnline.get(r.id);
-   if(c){Object.assign(c,r.data,{_onlineId:r.id,_ownerId:r.owner_id,_campaignCode:camp.code});}
-   else{c={...r.data,_onlineId:r.id,_ownerId:r.owner_id,_campaignCode:camp.code,readOnly:r.owner_id!==sessionUser.id};chars.push(c)}
- }
- // Do not delete local-only characters. Save cache.
- localStorage.setItem('chars',JSON.stringify(chars));renderCampChars();renderChars();
- if(current&&current._onlineId){const fresh=chars.find(x=>x._onlineId===current._onlineId);if(fresh&&document.getElementById('sheet').classList.contains('active')){current=fresh;fillSheet()}}
+  if(!camp)return;
+  try{const data=await wsSend('get_campaign',{code:camp.code});sessionUser=data.player;applyCampaignState(data)}catch(e){console.warn(e.message)}
 }
 function renderCamps(){
- const b=document.getElementById('campList'),a=v7Camps();
- b.innerHTML=a.length?a.map(c=>`<div class="card"><b>${escapeHtml(c.name)}</b><div class="small">Código: ${c.code}</div><button class="btn" onclick="openOnlineCampaign('${c.code}')">Abrir</button></div>`).join(''):'<p class="small">Nenhuma campanha online neste aparelho.</p>';
+  const b=document.getElementById('campList'),a=v7Camps();
+  b.innerHTML=a.length?a.map(c=>`<div class="card"><b>${escapeHtml(c.name)}</b><div class="small">Código: ${c.code}</div><button class="btn" onclick="openOnlineCampaign('${c.code}')">Abrir</button></div>`).join(''):'<p class="small">Nenhuma campanha online neste aparelho.</p>';
 }
 function renderCampChars(){
- const arr=chars.filter(c=>c._campaignCode===camp?.code&&c._onlineId);
- campChars.innerHTML=arr.length?arr.map(c=>`<div class="char" onclick="openRemoteChar('${c._onlineId}')"><img src="${c.img||''}"><b>${escapeHtml(c.name||'Sem nome')}</b><div class="small">${escapeHtml(c.race||'')}</div>${c._ownerId===sessionUser?.id?'<div class="small">Sua ficha</div>':'<div class="small">Outro jogador</div>'}</div>`).join(''):'<p class="small">Nenhum personagem nesta campanha ainda.</p>';
+  const box=document.getElementById('campChars');if(!box)return;
+  const arr=chars.filter(c=>c._campaignCode===camp?.code&&c._onlineId);
+  box.innerHTML=arr.length?arr.map(c=>`<div class="char" onclick="openRemoteChar('${c._onlineId}')"><img src="${c.img||''}" alt=""><b>${escapeHtml(c.name||'Sem nome')}</b><div class="small">${escapeHtml(c.race||'')}</div>${c._ownerId===sessionUser?.id?'<div class="small">Sua ficha</div>':'<div class="small">Outro jogador</div>'}</div>`).join(''):'<p class="small">Nenhum personagem nesta campanha ainda.</p>';
 }
 function escapeHtml(x){return String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function openRemoteChar(id){current=chars.find(c=>c._onlineId===id);if(!current)return;readOnly=current._ownerId!==sessionUser?.id;fillSheet();go('sheet');applyReadOnly()}
 function applyReadOnly(){document.querySelectorAll('#sheet input,#sheet select,#sheet textarea,#sheet button').forEach(el=>{if(el.id==='img'||el.textContent.includes('← Voltar'))return;el.disabled=!!readOnly});const s=document.querySelector('#sheet .card:last-child');if(s)s.style.display=readOnly?'none':''}
-async function createCharFromCamp(){
- if(!camp||!onlineReady)return;
- let c={id:rid(),name:'Novo personagem',gender:'Homem',path:'Mestre do Ar',race:'Humano',story:'',affType:'Ar',aff:0,breath:'',blood:'',attrs:Object.fromEntries(ATTR.map(a=>[a,5])),skills:Object.fromEntries(SK.map(s=>[s,0])),pv:25,pe:15,img:'',sun:false,moon:false};
- chars.push(c);current=c;c._campaignCode=camp.code;localStorage.setItem('chars',JSON.stringify(chars));openChar(c.id);await saveChar(false);await syncCampaign();
+async function onlineSaveCharacter(c){
+  if(!onlineReady||!c?._campaignCode)return null;
+  const payload={...c};delete payload._onlineId;delete payload._ownerId;delete payload._campaignCode;delete payload.readOnly;
+  const data=await wsSend('save_character',{code:c._campaignCode,characterId:c._onlineId||null,character:payload});
+  if(data?.character?.id)c._onlineId=data.character.id;
+  if(data?.character?.ownerId)c._ownerId=data.character.ownerId;
+  localStorage.setItem('chars',JSON.stringify(chars));
+  return data;
 }
-async function saveChar(show=true){
- if(!current)return;
- if(readOnly)return alert('Você só pode editar a sua própria ficha.');
- current.name=$("name").value;current.gender=$("gender").value;current.path=$("path").value;current.race=$("race").value;current.story=$("story").value;current.affType=$("affType").value;current.aff=Number($("aff").value||0);current.pv=Number($("pv").value||0);current.pe=Number($("pe").value||0);
- ATTR.forEach(a=>{const el=document.querySelector(`[data-a="${a}"]`);if(el)current.attrs[a]=+el.value});SK.forEach(s=>{const el=document.querySelector(`[data-s="${s}"]`);if(el)current.skills[s]=+el.value});
- localStorage.setItem('chars',JSON.stringify(chars));
- if(onlineReady&&current._campaignCode){
-   const payload={...current};delete payload._onlineId;delete payload._ownerId;delete payload._campaignCode;delete payload.readOnly;
-   const {data,error}=await sb.rpc('save_character',{p_code:current._campaignCode,p_character_id:current._onlineId||null,p_data:payload});
-   if(error){console.error(error);return alert('Ficha salva localmente, mas houve erro no banco: '+error.message)}
-   if(data?.id)current._onlineId=data.id;current._ownerId=sessionUser.id;localStorage.setItem('chars',JSON.stringify(chars));
- }
- if(show)alert('Ficha salva!');renderCampChars();
+async function createCharFromCamp(){
+  if(!camp)return alert('Abra uma campanha primeiro.');
+  const c=typeof freshCharacter==='function'?freshCharacter():{id:rid(),name:'Novo personagem',gender:'Homem',path:'Mestre do Ar',race:'Humano',story:'',affType:'Ar',aff:0,breath:'',blood:'',attrs:Object.fromEntries(ATTR.map(a=>[a,5])),skills:Object.fromEntries(SK.map(s=>[s,0])),pv:35,pe:22,img:'',inventory:'',sun:false,moon:false,humanTurns:0,oniFormActive:false,oniTurns:0};
+  c._resourceAuto=true;c._campaignCode=camp.code;chars.push(c);current=c;localStorage.setItem('chars',JSON.stringify(chars));openChar(c.id);
+  try{await onlineSaveCharacter(c);await syncCampaign()}catch(e){console.error(e);alert('A ficha foi criada localmente, mas não foi enviada ao servidor: '+e.message)}
 }
 async function deleteCurrentChar(){
- if(!current)return;
- if(!confirm(`Excluir a ficha "${current.name}"?`))return;
- if(readOnly)return alert('Você não pode excluir a ficha de outro jogador.');
- if(onlineReady&&current._campaignCode&&current._onlineId){const {error}=await sb.rpc('delete_character',{p_code:current._campaignCode,p_character_id:current._onlineId});if(error)return alert('Não foi possível excluir: '+error.message)}
- const id=current.id;const oid=current._onlineId;chars=chars.filter(c=>c!==current);localStorage.setItem('chars',JSON.stringify(chars));current=null;readOnly=false;go('lobby');await syncCampaign();
+  if(!current)return;if(readOnly)return alert('Você não pode excluir a ficha de outro jogador.');
+  if(!confirm(`Excluir a ficha "${current.name}"? Esta ação não pode ser desfeita.`))return;
+  try{if(onlineReady&&current._campaignCode&&current._onlineId)await wsSend('delete_character',{code:current._campaignCode,characterId:current._onlineId})}catch(e){return alert('Não foi possível excluir: '+e.message)}
+  chars=chars.filter(c=>c!==current);localStorage.setItem('chars',JSON.stringify(chars));current=null;readOnly=false;go(camp?'lobby':'chars');renderChars();renderCampChars();
 }
 function copyInvite(){if(!camp)return;const link=location.origin+location.pathname+'#camp='+camp.code;navigator.clipboard?.writeText(link);alert('Link da campanha copiado:\n'+link)}
-// Wrap navigation to render online campaign list.
-const _go=go;go=function(id){_go(id);if(id==='campaigns')renderCamps();if(id==='lobby'&&camp)renderCampChars();if(id==='sheet')applyReadOnly()}
+const _goWS=go;go=function(id){_goWS(id);if(id==='campaigns')renderCamps();if(id==='lobby'&&camp)renderCampChars();if(id==='sheet')applyReadOnly()};
+Object.defineProperty(window,'onlineReady',{configurable:true,get:()=>onlineReady});
+Object.defineProperty(window,'sessionUser',{configurable:true,get:()=>sessionUser});
 initOnline();
-</script>
-<script>
 /* V38 corrections */
 const SPECIAL_BREATHS={
   Sol:{name:'Respiração do Sol',attribute:'Força',abilities:[
@@ -441,7 +514,7 @@ window.addEventListener('load',()=>{addInventory();if(current){ensureTurnUI();up
   window.fillSheet = function(){
     if(!current) return;
     const set=(id,val)=>{const e=document.getElementById(id);if(e)e.value=val??''};
-    set('name',current.name); set('gender',current.gender||'Homem'); set('path',current.path||'Mestre do Ar');
+    set('name',current.name); set('gender',current.gender||'Homem'); set('path',current.path||'Mestre do Ar'); set('race',current.race||'Humano');
     set('story',current.story); set('affType',current.affType||'Ar'); set('aff',Number(current.aff||0));
     set('pv',Number(current.pv ?? 35)); set('pe',Number(current.pe ?? 22));
     const avatar=document.getElementById('avatar'); if(avatar) avatar.src=current.img||'';
@@ -500,9 +573,7 @@ window.addEventListener('load',()=>{addInventory();if(current){ensureTurnUI();up
     if(camp.code) localStorage.setItem('camp_'+camp.code,JSON.stringify(camp));
     renderCampChars();
     openChar(c.id);
-    if(window.onlineReady && typeof originalSave==='function') {
-      try { await originalSave(false); } catch(e){ console.error(e); }
-    }
+    if(window.onlineReady) { try { await onlineSaveCharacter(c); await syncCampaign(); } catch(e){ console.error(e); } }
   };
 
   window.renderCampChars = function(){
@@ -533,15 +604,8 @@ window.addEventListener('load',()=>{addInventory();if(current){ensureTurnUI();up
     localStorage.setItem('chars',JSON.stringify(chars));
     if(show) alert('Ficha salva!');
     renderChars(); renderCampChars();
-    if(window.onlineReady && current._campaignCode && typeof sb!=='undefined' && sb){
-      try {
-        const payload={...current}; delete payload._onlineId; delete payload._ownerId; delete payload._campaignCode; delete payload.readOnly;
-        const {data,error}=await sb.rpc('save_character',{p_code:current._campaignCode,p_character_id:current._onlineId||null,p_data:payload});
-        if(error) throw error;
-        if(data?.id) current._onlineId=data.id;
-        if(typeof sessionUser!=='undefined' && sessionUser) current._ownerId=sessionUser.id;
-        localStorage.setItem('chars',JSON.stringify(chars));
-      } catch(e){ console.error(e); }
+    if(window.onlineReady && current._campaignCode){
+      try { await onlineSaveCharacter(current); } catch(e){ console.error(e); }
     }
   };
 
